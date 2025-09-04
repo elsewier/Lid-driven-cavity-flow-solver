@@ -75,12 +75,54 @@ contains
 
         end function bspline_basis
 
+
+function bspline_deriv1(i, p, knots, u) result(val)
+
+        integer, intent(in)     :: i,p 
+        real(dp), intent(in)    :: knots(:), u 
+        real(dp)                :: val, term1, term2, coeff1, coeff2 
+
+        term1 = 0.0d0; term2 = 0.0d0 
+        if ((knots(i + p) - knots(i)) > 1.0e-12) then 
+                coeff1 = real(p, dp) / (knots(i + p) - knots(i))
+                term1 = coeff1 * bspline_basis(i, p - 1, knots, u)
+        endif 
+
+        if ((knots(i + p + 1) - knots(i + 1)) > 1.0e-12) then 
+                coeff2 = real(p, dp) / (knots(i + p + 1) - knots(i + 1))
+                term2 = coeff2 * bspline_basis(i + 1, p - 1, knots, u)
+        endif 
+
+        val = term1 - term2
+
+end function bspline_deriv1
+
+function bspline_deriv2(i, p, knots, u) result(val)
+
+        integer, intent(in)     :: i,p 
+        real(dp), intent(in)    :: knots(:), u 
+        real(dp)                :: val, term1, term2, coeff1, coeff2 
+        real(dp)                :: deriv1_a, deriv1_b
+
+        term1 = 0.0d0; term2 = 0.0d0 
+        if ((knots(i + p) - knots(i)) > 1.0e-12) then 
+                coeff1 = real(p, dp) / (knots(i + p) - knots(i))
+                deriv1_a = bspline_deriv1(i, p - 1, knots, u)
+                term1 = coeff1 * deriv1_a
+        endif 
+
+        if ((knots(i + p + 1) - knots(i + 1)) > 1.0e-12) then 
+                coeff2 = real(p, dp) / (knots(i + p + 1) - knots(i + 1))
+                deriv1_b = bspline_deriv1(i + 1, p - 1, knots, u)
+                term2 = coeff2 * deriv1_b
+        endif 
+
+        val = term1 - term2
+
+end function bspline_deriv2
+
+
 end module mod_bspline
-
-!TODO: bspline_deriv1 and bspline_deriv2 will be needed
-! function bspline_deriv1(i, p, knots, u) result(val)
-! function bspline_deriv2(i, p, knots, u) result(val)
-
 
 
 
