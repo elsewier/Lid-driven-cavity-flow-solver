@@ -19,6 +19,12 @@ module mod_params
         integer, parameter :: P_y = 3   ! Degree of b-splines in y-direction 
 
         ! Boundary types 
+        integer, parameter :: BTYPE_INTERIOR            = 0
+        integer, parameter :: BTYPE_MOVING_LID          = 1
+        integer, parameter :: BTYPE_WALL                = 2  
+        integer, parameter :: BTYPE_REENTRANT_CORNER    = 3
+        integer, parameter :: BTYPE_OUT_OF_DOMAIN       = -1    ! we will create the domain for full square first, and then remove
+                                                                !bottom right square 
 
 
 end module mod_params
