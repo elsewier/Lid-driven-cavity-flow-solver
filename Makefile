@@ -1,0 +1,6 @@
+
+$(FC)
+
+default: MAIN
+
+

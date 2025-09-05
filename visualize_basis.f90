@@ -2,7 +2,7 @@
 program visualize_basis
         use mod_params
         use mod_bspline
-        use mod_setup
+        use mod_grid
         implicit none 
 
         integer :: num_basis

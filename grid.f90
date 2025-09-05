@@ -1,6 +1,6 @@
 ! sets up the grid, bcs and assembles the matrix 
 
-module mod_setup
+module mod_grid
         use mod_params
         use mod_bspline
         implicit none 
@@ -105,5 +105,5 @@ endsubroutine setup_collocation_grid
                         
                         
 
-end module mod_setup
+end module mod_grid
 
