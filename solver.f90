@@ -2,6 +2,7 @@ module mod_solver
 
         use mod_params
         use mod_bspline
+        use mod_grid
         implicit none 
 contains 
         
@@ -10,7 +11,7 @@ contains
         real(dp), intent(out)   :: A(:,:), b(:)
         real(dp), intent(in)    :: colloc_pts(:,:)
         integer, intent(in)     :: boundary_types(:)
-        real(dp), intent(in)    :: knots_(x), knots_y(:)
+        real(dp), intent(in)    :: knots_x(:), knots_y(:)
 
         ! local vars
         integer                 :: k, row_idx, i_basis, j_basis, col_idx_psi, col_idx_omega
