@@ -1,109 +1,170 @@
-! sets up the grid, bcs and assembles the matrix 
-
 module mod_grid
-        use mod_params
-        use mod_bspline
-        implicit none 
+    use mod_params
+    use mod_bspline
+    implicit none
 contains
 
-        ! generate a uniform knot vector
 
-subroutine generate_knot_vector(p, num_basis, stretching_factor, knots)
+subroutine initialize_block(block, block_id)
+        type(block_type), intent(inout) :: block
+        integer, intent(in)             :: block_id
 
-        ! inputs
-        integer, intent(in)     :: p, num_basis
-        real(dp), intent(in)    :: stretching_factor
-        real(dp), intent(out)   :: knots(:)
+        block%id = block_id
+        block%P_x = P_x
+        block%P_y = P_y
 
-        ! local vars 
-        integer                 :: i,m 
-        real(dp)                :: s, points
+        select case (block_id)
+        case (1)
+                block%N_x = NX_B1
+                block%N_y = NY_B1
+                block%xmin = DOMAIN_XMIN
+                block%xmax = CORNER_X
+                block%ymin = DOMAIN_YMIN
+                block%ymax = CORNER_Y
+        case (2)
+                block%N_x  = NX_B2
+                block%N_y  = NY_B2
+                block%xmin = DOMAIN_XMIN
+                block%xmax = DOMAIN_XMAX
+                block%ymin = CORNER_Y
+                block%ymax = DOMAIN_YMAX
+        case default
+                write(*,*) "Error invalid block_id in initialize_block: ", block_id
+                stop
+                    
+        end select
 
-        m = p + num_basis + 1 ! total number of knots
+        allocate(block%colloc_pts(block%N_x * block%N_y, 2))
+        allocate(block%boundary_types(block%N_x * block%N_y))
+        allocate(block%knots_x(block%N_x + block%P_x + 1))
+        allocate(block%knots_y(block%N_y + block%P_y + 1))
 
-        do i = 1, p + 1
-                knots(i) = 0.0d0
-        enddo 
 
-        do i = p + 2, num_basis 
-                s       = real(i - p -1, dp) / real(num_basis - p, dp) ! this is uniform points right [0,1]
-                points  = tanh(stretching_factor * (2.0d0 * s - 1.0d0)) ! to use the full range of tanh we need to scale it to [-1,1]
+end subroutine initialize_block
 
-                knots(i) = 0.5d0 * (points + 1.0d0) ! scale back to [0,1]
+    subroutine generate_grid(block)
+        type(block_type), intent(inout) :: block
+
+        integer :: i, j, k
+        real(dp), allocatable :: x_norm(:), y_norm(:) ! Normalized coords [0,1]
+        real(dp), allocatable :: p1(:), p2(:)
+        real(dp) :: break_ratio
+
+        allocate(x_norm(block%N_x), y_norm(block%N_y))
+
+        ! first generate coordinates 
+        ! x direction
+        if (block%id == 2) then ! for block2
+            ! we will piecewise stretch to align the nodes
+            allocate(p1(NX_B2_PART1), p2(NX_B2_PART2))
+            do i = 1, NX_B2_PART1
+                s = real(i - 1, dp) / real(NX_B2_PART1 - 1, dp)
+                p1(i) = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)
+            enddo
+            do i = 1, NX_B2_PART2
+                s = real(i - 1, dp) / real(NX_B2_PART2 - 1, dp)
+                p2(i) = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)
+            enddo
+            ! Map the two normalized [0,1] arrays to a single normalized [0,1] array with a break
+            break_ratio = CORNER_X / DOMAIN_XMAX
+            x_norm(1:NX_B2_PART1) = p1 * break_ratio
+            x_norm(NX_B2_PART1 + 1 : block%N_x) = break_ratio + p2(2:NX_B2_PART2) * (1.0_dp - break_ratio)
+
+            deallocate(p1, p2)
+        else ! block 1
+            do i = 1, block%N_x
+                s = real(i - 1, dp) / real(block%N_x - 1, dp)
+                x_norm(i) = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)
+            enddo
+        endif
+
+        ! y direction
+        do j = 1, block%N_y
+            s = real(j - 1, dp) / real(block%N_y - 1, dp)
+            y_norm(j) = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)
         enddo
 
-        do i = num_basis + 1, m
-                knots(i) = 1.0d0
-        enddo 
+        ! generate knot vectors
+        if (block%id == 2) then
+            break_ratio = CORNER_X / DOMAIN_XMAX
+            call generate_stretched_knots(block%P_x, block%N_x, block%knots_x, break_point_ratio=break_ratio) ! piecewise
+        else
+            call generate_stretched_knots(block%P_x, block%N_x, block%knots_x)
+        endif
+        ! y knots are simple for both blocks
+        call generate_stretched_knots(block%P_y, block%N_y, block%knots_y)
 
-end subroutine generate_knot_vector
 
-subroutine setup_collocation_grid(colloc_pts, boundary_types)
-        
-
-        ! outputs
-        real(dp), intent(out)   :: colloc_pts(:,:)      ! array of (x,y) coords stored as (Nx*Ny,2)
-        integer, intent(out)    :: boundary_types(:)    ! (Nx*Ny) array which stores the type of each point 
-
-        ! local vars
-        integer                 :: i, j, k 
-        real(dp)                :: x, y 
-        real(dp), parameter     :: thr = 1.0e-6         ! will be used while comparing floats
-        real(dp)                :: s_x, s_y 
-        real(dp), parameter     :: stretch_factor = 2.5d0
-
+        ! convert to physical domain and flag the points
         k = 0
-        do j = 1, N_y           ! loop over wall-normal direction
-                do i = 1, N_x   ! loop over streamwise direction 
-                        k = k + 1 ! global point index (1 to Nx*Ny)
-                        
-                        ! we need to map (i,j) indices to (x,y) coordinates
-                        ! since bsplines are constructed using stretched mesh, we need to stretch collocation pts accordingly
-                        s_x = real(i - 1, dp) / real(N_x - 1, dp)
-                        s_y = real(j - 1, dp) / real(N_y - 1, dp) ! these are uniform between [0, 1]
+        do j = 1, block%N_y
+        do i = 1, block%N_x
+                k = k + 1
+                block%colloc_pts(k, 1) = block%xmin + x_norm(i) * (block%xmax - block%xmin)
+                block%colloc_pts(k, 2) = block%ymin + y_norm(j) * (block%ymax - block%ymin)
 
-                        ! stretching
-                        if (stretch_factor < 1e-06) then ! no stretch 
-                                x = s_x
-                                y = s_y
-                        else 
-                                x = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s_x - 1.0d0)) + 1.0d0)
-                                y = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s_y - 1.0d0)) + 1.0d0)
-                        endif 
-                        
-                        colloc_pts(k, 1) = x; colloc_pts(k, 2) = y
+                select case (block%id)
+                case (1)
+                    if (j == block%N_y) then
+                        block%boundary_types(k) = BTYPE_INTERFACE
+                    else if (i == 1 .OR. i == block%N_x .OR. j == 1) then
+                        block%boundary_types(k) = BTYPE_WALL
+                    else
+                        block%boundary_types(k) = BTYPE_INTERIOR
+                   endif
+                case (2)
+                    if (j == 1 .AND. i <= NX_B2_PART1) then
+                        block%boundary_types(k) = BTYPE_INTERFACE
+                    else if (j == block%N_y) then
+                        block%boundary_types(k) = BTYPE_MOVING_LID
+                    else if (i == 1 .OR. i == block%N_x .OR. j == 1) then
+                        block%boundary_types(k) = BTYPE_WALL
+                    else
+                        block%boundary_types(k) = BTYPE_INTERIOR
+                    endif
+                end select
+        enddo
+        enddo
 
-                        ! boundary types and bc checks 
-
-                        ! removed part
-                        if (x > 0.7d0 + thr .and. y < 0.4d0 + thr) then 
-                                boundary_types(k) = BTYPE_OUT_OF_DOMAIN 
-
-                        ! moving lid 
-                        else if (abs(y - 1.0d0) < thr) then 
-                                boundary_types(k) = BTYPE_MOVING_LID 
-
-                        ! walls 
-                        else if ((abs(y - 0.0d0) < thr .and. x < 0.7 + thr)     .or. &          ! bottom wall (x from 0 to 0.7)
-                                 (abs(x - 0.0d0) < thr)                         .or. &          ! left wall   (y from 0 to 1)
-                                 (abs(x - 1.0d0) < thr .and. y > 0.4d0 - thr)   .or. &          ! right wall  (y from 0.4 to 1)
-                                 (abs(x - 0.7d0) < thr .and. y < 0.4d0 + thr)   .or. &          ! inner vertical wall (y 0 to 0.4)
-                                 (abs(y - 0.4d0) < thr .and. x > 0.7d0 - thr)) then             ! inner horizontal wall (x 0.7 to 1)
-                                boundary_types(k) = BTYPE_WALL 
-
-                        ! interior points 
-                        else 
-                                boundary_types(k) = BTYPE_INTERIOR 
-                        endif 
-                enddo 
-        enddo 
-
-endsubroutine setup_collocation_grid
-        
+        deallocate(x_norm, y_norm)
+end subroutine generate_grid
 
 
-                        
-                        
+SUBROUTINE generate_stretched_knots(p, num_basis, knots_out, break_point_ratio)
+        integer, intent(in)     :: p, num_basis
+        real(dp), intent(out)   :: knots_out(:)
+        real(dp), intent(IN), optional :: break_point_ratio
+
+        integer  :: i, m, break_index, n1, n2
+        real(dp) :: s, stretched_s
+        real(dp), PARAMETER :: stretch_factor = 2.5d0
+
+        m = p + num_basis + 1
+        knots_out(1 : p + 1) = 0.0_dp
+        knots_out(num_basis + 1 : m) = 1.0_dp
+
+        if (present(break_point_ratio)) then
+            ! Two-part stretching for knots
+            break_index = NINT(REAL(num_basis - p, dp) * break_point_ratio) + p + 1
+            n1 = break_index - (p + 1)
+            n2 = num_basis - break_index + 1
+            do i = p + 2, break_index
+                s = REAL(i - (p + 1), dp) / REAL(n1, dp)
+                stretched_s = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)
+                knots_out(i) = 0.0_dp + stretched_s * break_point_ratio
+            enddo
+            do i = break_index + 1, num_basis
+                s = REAL(i - break_index, dp) / REAL(n2, dp)
+                stretched_s = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)
+                knots_out(i) = break_point_ratio + stretched_s * (1.0_dp - break_point_ratio)
+            enddo
+        else
+            ! Simple one-part stretching for knots
+            do i = p + 2, num_basis
+                s = REAL(i - p - 1, dp) / REAL(num_basis - p, dp)
+                knots_out(i) = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)
+            enddo
+        endif
+end subroutine generate_stretched_knots
 
 end module mod_grid
-

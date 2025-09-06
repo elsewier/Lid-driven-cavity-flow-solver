@@ -9,22 +9,60 @@ module mod_params
         ! precision
         integer, parameter :: dp = KIND(1.0d0) ! double precision for now 
 
+        ! GEOMETRY DEFINITION
+        real(dp), parameter :: DOMAIN_XMIN = 0.0d0
+        real(dp), parameter :: DOMAIN_XMAX = 1.0d0
+        real(dp), parameter :: DOMAIN_YMIN = 0.0d0
+        real(dp), parameter :: DOMAIN_YMAX = 1.0d0
+
+        ! LOCATION OF INNER CORNER 
+        real(dp), parameter :: CORNER_X = 0.7d0
+        real(dp), parameter :: CORNER_Y = 0.4d0
+
+        ! GRID RESOLUTION - DISCRETIZATION PARAMETERS
+        integer, parameter :: NUM_BLOCKS = 2
+        integer, parameter :: P_x = 3, P_y = 3 ! B-spline degrees
+
+        ! BLOCK 1 (bottom left block)
+        integer, parameter :: NX_B1 = 49 ! number of points in x-direction for block 1 
+        integer, parameter :: NY_B1 = 16 ! number of points in x-direction for block 1
+
+        ! NOTE: I think NX_B1 must have 7x node and NX_B2_PART2 = 3x based on the ratio
+        ! BLOCK 2 (top block)
+        integer, parameter :: NX_B2_PART1 = NX_B1 ! points in [0, corner_x]
+        integer, parameter :: NX_B2_PART2 = 21    ! points in [corner_x, 1] 
+        integer, parameter :: NX_B2 = NX_B2_PART1 + NX_B2_PART2 - 1 
+        integer, parameter :: NY_B2 = 24
+
         ! Physical parameters
 
 
+        TYPE :: block_type                               ! will be used for multiblock mesh 
+                integer  :: id                           ! Block id 
+                integer  :: N_x, N_y                     ! number of points in each direction
+                integer  :: P_x, P_y                     ! B-spline degree in each direction
+
+                real(dp) :: xmin, xmax, ymin, ymax       ! Pyhsical boundaries of the block 
+
+                ! grid and basis information for this block
+                real(dp), allocatable :: colloc_pts(:,:)     ! (nx*ny,2)
+                integer, allocatable     :: boundary_types(:)   ! (nx * ny)
+                real(dp), allocatable    :: knots_x(:), knots_y(:)
+        end type block_type
+
+
         ! Discretization parameters 
-        integer, parameter :: N_x = 15  ! Number of basis functions in x-direction
-        integer, parameter :: N_y = 15  ! Number of basis functions in y-direction
-        integer, parameter :: P_x = 3   ! Degree of b-splines in x-direction 
-        integer, parameter :: P_y = 3   ! Degree of b-splines in y-direction 
+        real(dp), parameter :: stretch_factor = 2.5d0
+        ! integer, parameter :: N_x = 100  ! Number of basis functions in x-direction
+        ! integer, parameter :: N_y = 100  ! Number of basis functions in y-direction
+        ! integer, parameter :: P_x = 5   ! Degree of b-splines in x-direction 
+        ! integer, parameter :: P_y = 5   ! Degree of b-splines in y-direction 
 
         ! Boundary types 
         integer, parameter :: BTYPE_INTERIOR            = 0
         integer, parameter :: BTYPE_MOVING_LID          = 1
         integer, parameter :: BTYPE_WALL                = 2  
-        integer, parameter :: BTYPE_REENTRANT_CORNER    = 3
-        integer, parameter :: BTYPE_OUT_OF_DOMAIN       = -1    ! we will create the domain for full square first, and then remove
-                                                                !bottom right square 
+        integer, parameter :: BTYPE_INTERFACE           = 3
 
 
 end module mod_params
