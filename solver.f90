@@ -230,133 +230,66 @@ module mod_solver
       enddo 
     end subroutine apply_psi_bcs
 
+    subroutine calculate_advection_term(blocks, d_psi, d_omega, adv_term_vec)
+      ! calculates the non-linear advection term at all interior collocation points (N(omega))
+      type(BLOCK_TYPE), intent(in)  :: blocks(:)
+      real(dp), intent(in)          :: d_psi(:), d_omega(:)
+      real(dp), intent(out)         :: adv_term_vec(:)
 
+      integer   :: iblock, k, i_basis, j_basis
+      integer   :: global_psi, global_omega
+      integer   :: row_index
+      integer   :: global_point_offset
+      real(dp)  :: x, y, u_vel, v_vel, domega_dx, domega_dy 
+      real(dp)  :: N_val, M_val, dN_dx, dM_dy 
 
+      adv_term_vec = 0.0d0; global_point_offset = 0
 
-    ! fills the global system matrix [A] and vector {b}
-    subroutine assemble_system(blocks, A, b)
-      type(block_type), intent(in)  :: blocks(:)
-      real(dp), intent(out)         :: A(:,:)
-      real(dp), intent(out)         :: b(:)
-
-      integer   :: iblock, k, row_index
-      integer   :: i_basis, j_basis 
-      integer   :: col_psi, col_omega 
-      real(dp)  :: x, y 
-      real(dp)  :: N_val, M_val, d2N_dx2, d2M_dy2 
-
-      integer :: global_point_offset ! for tracking rows for each block 
-
-      A = 0.0d0; b = 0.0d0; global_point_offset = 0 
-
-      ! loop every block in our domain 
-      do iblock = 1, NUM_BLOCKS 
-        ! loop every collocation point k in the current block 
-        ! each point defines one equation to solve 
+      do iblock = 1, NUM_BLOCKS
         do k = 1, blocks(iblock)%N_x * blocks(iblock)%N_y 
-          ! the global row index is the local index + offset from previous blocks 
-          row_index = global_point_offset + k 
+        
+          ! we only need to calculate this at interior points 
+          if (blocks(iblock)%boundary_types(k) /= BTYPE_INTERIOR) CYCLE 
 
-          ! physical coordinates of the current point 
           x = blocks(iblock)%colloc_pts(k, 1)
           y = blocks(iblock)%colloc_pts(k, 2)
 
-          ! BC check 
-          select case (blocks(iblock)%boundary_types(k))
+          u_vel = 0.0d0; v_vel = 0.0d0; domega_dx = 0.0d0; domega_dy = 0.0d0
 
-          case (BTYPE_INTERIOR)
-            ! we solve nabla^2(psi) + omega = 0 
-            do j_basis = 1, blocks(iblock)%N_y 
-              do i_basis = 1, blocks(iblock)%N_x 
-                ! we need global column indices for this basis function 
-                col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
-                col_omega = get_global_psi_index(iblock, i_basis, j_basis)
+          do j_basis = 1, blocks(iblock)%N_y 
+            do i_basis = 1, blocks(iblock)%N_x
+              global_psi    = get_global_psi_index(iblock, i_basis, j_basis)
+              global_omega  = get_global_omega_index(iblock, i_basis, j_basis)
 
-                ! calculate the value of the basis function and derivatives at (x,y)
-                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                d2N_dx2   = bspline_deriv2(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                d2M_dy2   = bspline_deriv2(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+              N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
+              M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+              dN_dx     = bspline_deriv1(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
+              dM_dy     = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
 
-                A(row_index, col_psi)   = d2N_dx2 * M_val + N_val * d2M_dy2 ! nabla^2(psi)
-                A(row_index, col_omega) = N_val * M_val                     ! omega
-              enddo 
+              ! calculate velocities: u = d(psi)/dy, v = -d(psi)/dx 
+              u_vel = u_vel + d_psi(global_psi) * (N_val * dM_dy)
+              v_vel = v_vel - d_psi(global_psi) * (dN_dx * M_val)
+
+              ! calculate vorticity gradients: d(omega)/dx, d(omega)/dy 
+              domega_dx = domega_dx + d_omega(global_omega) * (dN_dx * M_val)
+              domega_dy = domega_dy + d_omega(global_omega) * (N_val * M_val)
             enddo 
-            b(row_index) = 0.0d0 
+          enddo 
 
-          case (BTYPE_WALL, BTYPE_MOVING_LID)
-            ! we solve psi = 0 for now 
-            
-            do j_basis = 1, blocks(iblock)%N_y 
-              do i_basis = 1, blocks(iblock)%N_x 
-                col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
-                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                A(row_index, col_psi) = N_val * M_val 
-              enddo 
-            enddo 
-            b(row_index) = 0.0d0
-
-          case (BTYPE_INTERFACE)
-            ! TODO: we need to enforce vorticity later 
-            ! We need to enforce both streamfunction and velocity are continuous 
-            if (iblock == 1) then 
-              ! we enforce continuity for psi 
-              ! psi_block1 - psi_block2 = 0 
-              
-              ! first add the contributions from block 1 with +1 coeff 
-              do j_basis = 1, blocks(1)%N_y 
-                do i_basis = 1, blocks(1)%N_x 
-                  col_psi   = get_global_psi_index(1, i_basis, j_basis)
-                  N_val     = bspline_basis(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x)
-                  M_val     = bspline_basis(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y)
-                  A(row_index, col_psi) = 1.0d0 * (N_val * M_val) 
-                enddo 
-              enddo 
-
-              ! then add the contributions from block2 with -1 coeff 
-              do j_basis = 1, blocks(2)%N_y 
-                do i_basis = 1, blocks(2)%N_x 
-                  col_psi   = get_global_psi_index(2, i_basis, j_basis)
-                  N_val     = bspline_basis(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x)
-                  M_val     = bspline_basis(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y)
-                  A(row_index, col_psi) = -1.0d0 * (N_val * M_val) 
-                enddo 
-              enddo 
-              b(row_index) = 0.0d0
-
-            else if (iblock == 2) then
-              ! we enforce derivative continuity here 
-              ! d(psi_B1)/dy - d(psi_B2)/dy = 0
-             
-              ! again add contibutions from block1 with +1 coeff 
-              do j_basis = 1, blocks(1)%N_y 
-                do i_basis = 1, blocks(1)%N_x 
-                  col_psi   = get_global_psi_index(1, i_basis, j_basis)
-                  N_val     = bspline_basis(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x)
-                  M_val     = bspline_basis(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y)
-                  A(row_index, col_psi) = 1.0d0 * (N_val * M_val) 
-                enddo 
-              enddo 
-
-              ! negative contribution from block2
-              do j_basis = 1, blocks(2)%N_y 
-                do i_basis = 1, blocks(2)%N_x 
-                  col_psi   = get_global_psi_index(2, i_basis, j_basis)
-                  N_val     = bspline_basis(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x)
-                  M_val     = bspline_basis(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y)
-                  A(row_index, col_psi) = -1.0d0 * (N_val * M_val) 
-                enddo 
-              enddo 
-              b(row_index) = 0.0d0
-            end if 
-
-          end select 
-
+          ! calculate the advection term and store it 
+          row_index = global_point_offset + k 
+          adv_term_vec(row_index) = -(u_vel * domega_dx + v_vel * domega_dy)
         enddo 
-        ! update the offset for the next blocks rows 
         global_point_offset = global_point_offset + (blocks(iblock)%N_x * blocks(iblock)%N_y)
       enddo 
-    end subroutine assemble_system
+    end subroutine calculate_advection_term
+
+              
+
+
+
+
+
+
 
 end module mod_solver
