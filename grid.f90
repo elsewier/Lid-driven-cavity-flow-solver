@@ -48,7 +48,8 @@ end subroutine initialize_block
         integer :: i, j, k
         real(dp), allocatable :: x_norm(:), y_norm(:) ! Normalized coords [0,1]
         real(dp), allocatable :: p1(:), p2(:)
-        real(dp) :: break_ratio
+        real(dp)              :: s
+        real(dp)              :: break_ratio
 
         allocate(x_norm(block%N_x), y_norm(block%N_y))
 
