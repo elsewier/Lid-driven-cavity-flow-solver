@@ -35,6 +35,13 @@ module mod_params
         integer, parameter :: NY_B2 = 24
 
         ! Physical parameters
+        real(dp), parameter :: REYNOLDS_NUMBER = 100.0d0
+
+        ! L-S RK3 Coefficients from Spalart, Moser & Rogers (1991)
+        real(dp), dimension(3)  :: rk_alpha = (/ 29.0d0 / 60.0d0, -3.0d0 / 40.0d0, 1.0d0 / 6.0d0 /)
+        real(dp), dimension(3)  :: rk_beta  = (/ 37.0d0 / 160.0d0, 5.0d0 / 24.0d0, 1.0d0 / 6.0d0 /)
+        real(dp), dimension(3)  :: rk_gamma = (/ 8.0d0  / 15.0d0, 5.0d0 / 12.0d0, 3.0d0 / 4.0d0 /)
+        real(dp), dimension(3)  :: rk_zeta  = (/ 0.0d0, -17.0d0 / 60.0d0, -5.0d0 / 12.0d0 /)
 
 
         TYPE :: block_type                               ! will be used for multiblock mesh 

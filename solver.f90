@@ -12,7 +12,9 @@ module mod_solver
   integer :: omega_offset_b1 = 0
   integer :: omega_offset_b2 = 0
 
-  public :: initialize_solver, get_global_psi_index, get_global_omega_index, assemble_constant_matrices, apply_psi_bcs
+  public  :: initialize_solver, get_global_psi_index, get_global_omega_index, assemble_constant_matrices, apply_psi_bcs
+  public  :: calculate_advection_term, apply_omega_bcs, assemble_rk3_step
+  public  :: extract_laplacian_operator 
 
     
   contains 
@@ -283,6 +285,197 @@ module mod_solver
         global_point_offset = global_point_offset + (blocks(iblock)%N_x * blocks(iblock)%N_y)
       enddo 
     end subroutine calculate_advection_term
+
+
+    subroutine apply_omega_bcs(blocks, d_psi, A_step, b_step)
+      ! enforces the non-slip condition by setting the vorticity 0 at the wall. 
+      ! LHS and RHS modifies for an implicit solve 
+      type(block_type), intent(in)  :: blocks(:)
+      real(dp), intent(in)          :: d_psi(:)
+      real(dp), intent(inout)       :: A_step(:,:), b_step(:)
+
+      integer   :: iblock, k, row_index, i_basis, j_basis
+      integer   :: col_omega 
+      integer   :: global_point_offset 
+      real(dp)  :: x, y, N_val, M_val 
+      real(dp)  :: omega_wall_val 
+
+      global_point_offset = 0 
+
+      do iblock = 1, NUM_BLOCKS
+        do k = 1, blocks(iblock)%N_x * blocks(iblock)%N_y 
+          row_index = global_point_offset + k 
+
+          ! we only want walls and lid points 
+          select case (blocks(iblock)%boundary_types(k))
+          case (BTYPE_WALL, BTYPE_MOVING_LID)
+            x = blocks(iblock)%colloc_pts(k, 1)
+            y = blocks(iblock)%colloc_pts(k, 2)
+
+            ! TODO: calculate required wall vorticity
+            omega_wall_val = 0.0d0 ! placeholder
+
+            A_step(row_index, :)  = 0.0d0 
+            b_step(row_index)     = omega_wall_val
+
+            ! omega_at_point = omega_wall_val
+            do j_basis = 1, blocks(iblock)%N_y 
+              do i_basis = 1, blocks(iblock)%N_x
+                col_omega = get_global_omega_index(iblock, i_basis, j_basis)
+                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
+                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+                A_step(row_index, col_omega) = N_val * M_val
+              enddo 
+            enddo 
+          end select 
+        enddo 
+        global_point_offset = global_point_offset + (blocks(iblock)%N_x * blocks(iblock)%N_y)
+      enddo 
+    end subroutine apply_omega_bcs 
+
+    subroutine extract_laplacian_operator(blocks, A_psi, K_omega)
+      type(block_type), intent(in)  :: blocks(:)
+      real(dp), intent(in)          :: A_psi(:,:)
+      real(dp), intent(out)         :: K_omega(:,:)
+
+      ! for now we assume A_psi = k_omega 
+      K_omega = A_psi 
+    end subroutine extract_laplacian_operator
+
+    subroutine assemble_rk3_step(blocks, step_num, A_step, b_step, dt, K, M, &
+                                  d_omega_n, d_psi_n, d_omega_s1, d_omega_s2, &
+                                  N_n, N_s1, N_s2)
+
+      type(block_type), intent(in)  :: blocks(:)
+      integer, intent(in)           :: step_num
+      real(dp), intent(out)         :: A_step(:,:), b_step(:)
+      real(dp), intent(in)          :: dt
+      real(dp), intent(in)          :: K(:,:), M(:,:)
+      real(dp), intent(in)          :: d_omega_n(:), d_psi_n(:), d_omega_s1(:), d_omega_s2(:), N_n(:), N_s1(:), N_s2(:)
+      real(dp)                      :: diffusion_coeff = 1.0d0 / REYNOLDS_NUMBER 
+
+
+      ! Select coefficients and RHS terms based on the step number 
+      select case (step_num)
+      case (1)
+        ! {b1} = M*d_omega_n + dt * alpha1*(1/Re)*K*d_omega_n + dt*gamma1*N_n 
+        ! write(*,*) "d_omega_n", d_omega_n
+        write(*,*) 'shape M', shape(M)
+        write(*,*) 'd_omega_n', shape(d_omega_n)
+
+        b_step = matmul(M, d_omega_n) !+ (dt * rk_alpha(1) * diffusion_coeff) * matmul(K, d_omega_n) + dt * rk_gamma(1) * N_n 
+        write(*,*) 'here'
+        ! [A1] = [M] - dt * beta1 * (1/Re) * [K]
+        A_step = M - (dt * rk_beta(1) * diffusion_coeff) * K 
+      case (2)
+        ! {b2} = M*d_omega_s1 + dt * alpha2*(1/Re)*K*d_omega_s1 + dt*gamma2*N_s1 + dt*zeta2*N_n 
+        b_step = matmul(M, d_omega_s1) + (dt * rk_alpha(2) * diffusion_coeff) * matmul(K, d_omega_s1) + & 
+                dt * rk_gamma(2) * N_s1 + dt * rk_zeta(2) * N_n 
+        ! [A2] = [M] - dt * beta2 * (1/Re) * [K]
+        A_step = M - (dt * rk_beta(2) * diffusion_coeff) * K 
+      case (3)
+        ! {b3} = M*d_omega_s2 + dt * alpha3*(1/Re)*K*d_omega_s2 + dt*gamma3*N_s2 + dt*zeta3*N_s1 
+        b_step = matmul(M, d_omega_s2) + (dt * rk_alpha(3) * diffusion_coeff) * matmul(K, d_omega_s2) + & 
+                dt * rk_gamma(3) * N_s2 + dt * rk_zeta(3) * N_s1
+        ! [A3] = [M] - dt * beta3 * (1/Re) * [K]
+        A_step = M - (dt * rk_beta(3) * diffusion_coeff) * K 
+      end select 
+
+      ! assemble the implicit LHS matrix 
+
+      ! overwrite boundary rows with wall vorticity condition 
+      call apply_omega_bcs(blocks, d_psi_n, A_step, b_step)
+
+
+    end subroutine assemble_rk3_step
+
+    ! subroutine assemble_rk3_step1(blocks, A_step, b_step, dt, K, M, d_omega_n, d_psi_n, N_n)
+    !   type(block_type), intent(in)  :: blocks(:)
+    !   real(dp), intent(out)         :: A_step(:,:), b_step(:)
+    !   real(dp), intent(in)          :: dt
+    !   real(dp), intent(in)          :: K(:,:), M(:,:)
+    !   real(dp), intent(in)          :: d_omega_n(:), d_psi_n(:), N_n(:)
+    !
+    !   real(dp), parameter :: alpha1 = 29.0d0 / 60.0d0 
+    !   real(dp), parameter :: beta1  = 37.0d0 / 160.0d0
+    !   real(dp), parameter :: gamma1 = 8.0d0 / 15.0d0 
+    !
+    !   real(dp)            :: diffusion_coeff = 1.0d0 / REYNOLDS_NUMBER 
+    !
+    !   ! assemble the implicit LHS matrix for interior points 
+    !   ! [A1] = [M] - dt * beta1 * (1/Re) * [K]
+    !   A_step = M - (dt * beta1 * diffusion_coeff) * K 
+    !
+    !   ! assemble the explicit RHS vector 
+    !   ! {b1} = M*d_omega_n + dt * alpha1*(1/Re)*K*d_omega_n + dt*gamma1*N_n 
+    !   b_step = matmul(M, d_omega_n) + (dt * alpha1 * diffusion_coeff) * matmul(K, d_omega_n) + dt * gamma1 * N_n 
+    !
+    !   ! overwrite boundary rows with wall vorticity condition 
+    !   call apply_omega_bcs(blocks, d_psi_n, A_step, b_step)
+    !
+    ! end subroutine assemble_rk3_step1
+    !
+    ! subroutine assemble_rk3_step2(blocks, A_step, b_step, dt, K, M, d_omega_s1, d_psi_n, N_n, N_s1)
+    !   type(block_type), intent(in)  :: blocks(:)
+    !   real(dp), intent(out)         :: A_step(:,:), b_step(:)
+    !   real(dp), intent(in)          :: dt
+    !   real(dp), intent(in)          :: K(:,:), M(:,:)
+    !   real(dp), intent(in)          :: d_omega_s1(:), d_psi_n(:), N_n(:), N_s1(:)
+    !
+    !   real(dp), parameter :: alpha2 = -3.0d0 / 40.0d0
+    !   real(dp), parameter :: beta2  = 5.0d0 / 24.0d0 
+    !   real(dp), parameter :: gamma2 = 5.0d0 / 12.0d0 
+    !   real(dp), parameter :: zeta2  = -17.0d0 / 60.0d0
+    !
+    !   real(dp)            :: diffusion_coeff = 1.0d0 / REYNOLDS_NUMBER 
+    !
+    !   ! LHS vector 
+    !   ! [A2] = [M] - dt * beta2 * (1/Re) * [K]
+    !   A_step = M - (dt * beta2 * diffusion_coeff) * K 
+    !
+    !   ! RHS vector 
+    !   ! {b2} = M*d_omega_s1 + dt * alpha2*(1/Re)*K*d_omega_s1 + dt*gamma2*N_s1 + dt*zeta2*N_n 
+    !   b_step = matmul(M, d_omega_s1) + (dt * alpha2 * diffusion_coeff) * matmul(K, d_omega_s1) + & 
+    !            dt * gamma2 * N_s1 + dt * zeta2 * N_n 
+    !   ! overwrite boundary rows with wall vorticity condition 
+    !   call apply_omega_bcs(blocks, d_psi_n, A_step, b_step)
+    !
+    ! end subroutine assemble_rk3_step2
+    !
+    ! subroutine assemble_rk3_step3(blocks, A_step, b_step, dt, K, M, d_omega_s2, d_psi_n, N_s1, N_s2)
+    !   type(block_type), intent(in)  :: blocks(:)
+    !   real(dp), intent(out)         :: A_step(:,:), b_step(:)
+    !   real(dp), intent(in)          :: dt
+    !   real(dp), intent(in)          :: K(:,:), M(:,:)
+    !   real(dp), intent(in)          :: d_omega_s2(:), d_psi_n(:), N_s1(:), N_s2(:)
+    !
+    !   real(dp), parameter :: alpha3 = 1.0d0 / 6.0d0
+    !   real(dp), parameter :: beta3  = 1.0d0 / 6.0d0
+    !   real(dp), parameter :: gamma3 = 3.0d0 / 4.0d0 
+    !   real(dp), parameter :: zeta3  = -5.0d0 / 12.0d0
+    !
+    !   real(dp)            :: diffusion_coeff = 1.0d0 / REYNOLDS_NUMBER 
+    !
+    !   ! LHS vector 
+    !   ! [A3] = [M] - dt * beta3 * (1/Re) * [K]
+    !   A_step = M - (dt * beta3 * diffusion_coeff) * K 
+    !
+    !   ! RHS vector 
+    !   ! {b3} = M*d_omega_s2 + dt * alpha3*(1/Re)*K*d_omega_s2 + dt*gamma3*N_s2 + dt*zeta3*N_s1 
+    !   b_step = matmul(M, d_omega_s2) + (dt * alpha3 * diffusion_coeff) * matmul(K, d_omega_s2) + & 
+    !            dt * gamma3 * N_s2 + dt * zeta3 * N_s1
+    !   ! overwrite boundary rows with wall vorticity condition 
+    !   call apply_omega_bcs(blocks, d_psi_n, A_step, b_step)
+    !
+    ! end subroutine assemble_rk3_step3
+
+      
+
+
+
+
+
+
 
               
 

@@ -37,6 +37,19 @@ program L_shaped_cavity_solver
   ! loop counters 
   integer :: t, iblock, k 
 
+  ! laplacian matrix [K] from the interior part of A_psi 
+  real(dp), allocatable   :: K_omega(:,:)
+  ! L-S RK3 Coefficients from Spalart, Moser & Rogers (1991)
+  ! real(dp), dimension(3)  :: rk_alpha = (/ 29.0d0 / 60.0d0, -3.0d0 / 40.0d0, 1.0d0 / 6.0d0 /)
+  ! real(dp), dimension(3)  :: rk_beta  = (/ 37.0d0 / 160.0d0, 5.0d0 / 24.0d0, 1.0d0 / 6.0d0 /)
+  ! real(dp), dimension(3)  :: rk_gamma = (/ 8.0d0  / 15.0d0, 5.0d0 / 12.0d0, 3.0d0 / 4.0d0 /)
+  ! real(dp), dimension(3)  :: rk_zeta  = (/ 0.0d0, -17.0d0 / 60.0d0, -5.0d0 / 12.0d0 /)
+  ! intermediate storage vectors for RK3
+  real(dp), allocatable   :: d_omega_s1(:), d_omega_s2(:) ! step 1 and 2 results 
+  real(dp), allocatable   :: N_omega_n(:), N_omega_s1(:), N_omega_s2(:) ! advection terms 
+  real(dp), allocatable   :: A_step(:,:), b_step(:)
+  
+
 
   write(*,*) "======================================="
   write(*,*) "L-shaped Cavity flow solver"
@@ -60,6 +73,10 @@ program L_shaped_cavity_solver
   allocate(A_psi(N, N), M_psi(N, N), M_omega(N, N))
   allocate(d_psi_old(N), d_omega_old(N), d_psi_new(N), d_omega_new(N))
   allocate(b_psi_total(N), b_psi_bc(N), b_omega_rhs(N))
+  allocate(K_omega(N, N))
+  allocate(d_omega_s1(N), d_omega_s2(N))
+  allocate(N_omega_n(N), N_omega_s1(N), N_omega_s2(N))
+
 
   ! initial conditions 
   d_psi_old = 0.0d0; d_omega_old = 0.0d0; d_psi_new = 0.0d0; d_omega_new = 0.0d0
@@ -70,39 +87,77 @@ program L_shaped_cavity_solver
   write(*,*) "3. Starting time-stepping loop..."
   n_steps = ceiling(t_end / dt)
 
-  do t = 1, n_steps 
-    current_time = t * dt 
+! The main time loop
+  do t = 1, n_steps
 
-    ! Apply time-dependent bcs to psi 
-    call apply_psi_bcs(blocks, A_psi, b_psi_bc, current_time)
-    ! Calculate the RHS of the vorticity equation 
-    ! RHS = -(u.grad)omega + (1/Re) * nabla^2(omega)
-    ! call calculate_vorticity_rhs(blocks, d_psi_old, d_omega_old, b_omega_rhs)
+    ! ====================================================================
+    ! STEP 0: UPDATE STATE FOR THE CURRENT STEP
+    ! ====================================================================
+    d_psi_old = d_psi_new
+    d_omega_old = d_omega_new
+    current_time = (t - 1) * dt
 
-    ! update interior vorticity with forward stepping 
-    ! omega_new = omega_old + dt * RHS 
-    d_omega_new = d_omega_old + dt * b_omega_rhs 
+    ! ====================================================================
+    ! L-S RK3 STAGE 1
+    ! ====================================================================
+    ! Calculate N(omega_n) using the state at the beginning of the step
+    call calculate_advection_term(blocks, d_psi_old, d_omega_old, N_omega_n)
+    write(*,*) 'advection term calculated for step 1'
 
-    ! enforce wall vorticity bcs at new time 
-    ! call apply_omega_bcs(blocks, d_psi_old, d_omega_new)
+    ! Assemble the system for step 1
+    call assemble_rk3_step(blocks, 1, A_step, b_step, dt, K_omega, M_omega, &
+                           d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
+                           N_omega_n, N_omega_s1, N_omega_s2)
 
-    ! solve for the new streamfunction 
-    ! A_psi * d_psi_new = -M_omega * d_omega_new + b_psi_bc 
-    ! b_psi_total = matmul(-M_omega, d_omega_new) + b_psi_bc 
-    !
-    ! CALL LAPACK SOLVER 
-    ! call DGESV(N, 1, A_psi, N, ipiv, b_psi_total, N, info )
-    ! d_psi_new = b_psi_total 
+    ! TODO: Placeholder for Lapack call
+    d_omega_s1 = 0.0d0 ! replace this with lapack solver
+    write(*,*) 'step1 complete'
 
+    ! ====================================================================
+    ! L-S RK3 STAGE 2
+    ! ====================================================================
+    ! Calculate N(omega_s1)
+    call calculate_advection_term(blocks, d_psi_old, d_omega_s1, N_omega_s1)
+    write(*,*) 'advection term calculated for step 2'
 
-    ! update for next iteration 
-    ! d_psi_old = d_psi_new 
-    ! d_omega_old = d_omega_new 
-    !
-    ! output 
-    if (mod(t, output_interval) == 0) then 
+    call assemble_rk3_step(blocks, 2, A_step, b_step, dt, K_omega, M_omega, &
+                           d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
+                           N_omega_n, N_omega_s1, N_omega_s2)
 
-    endif 
+    ! TODO: Placeholder for Lapack call
+    d_omega_s2 = 0.0d0 ! replace this with lapack solver
+    write(*,*) 'step2 complete'
+
+    ! ====================================================================
+    ! L-S RK3 STAGE 3
+    ! ====================================================================
+    ! Calculate N(omega_s2)
+    call calculate_advection_term(blocks, d_psi_old, d_omega_s2, N_omega_s2)
+    write(*,*) 'advection term calculated for step 3'
+
+    call assemble_rk3_step(blocks, 3, A_step, b_step, dt, K_omega, M_omega, &
+                           d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
+                           N_omega_n, N_omega_s1, N_omega_s2)
+
+    ! Solver for d_omega_new (the final vorticity at the end of the time step)
+    ! TODO: Placeholder for Lapack call
+    d_omega_new = 0.0d0 ! replace this with lapack solver
+    write(*,*) 'step3 complete'
+
+    ! ====================================================================
+    ! FINAL PSI UPDATE
+    ! ====================================================================
+    ! Apply boundary conditions at the END of the time step (t_n+1)
+    call apply_psi_bcs(blocks, A_psi, b_psi_bc, t * dt) ! 
+    b_psi_total = matmul(-M_omega, d_omega_new) + b_psi_bc
+
+    ! TODO: call dgesv to solve for d_psi_new
+    d_psi_new = 0.0d0
+
+    ! output
+    if (mod(t, output_interval) == 0) then
+      write(*,'(A, I6, A, I6, A, F8.4)') "Timestep:", t, "/", n_steps, "  Time:", t * dt
+    endif
   enddo
 
   write(*,*) "Deallocating memory..."
