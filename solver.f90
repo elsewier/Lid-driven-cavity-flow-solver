@@ -284,18 +284,18 @@ module mod_solver
     end subroutine calculate_advection_term
 
 
-    subroutine apply_omega_bcs(blocks, d_psi, A_step, b_step)
+    subroutine apply_omega_bcs(blocks, d_psi_n, A_step, b_step)
       ! enforces the non-slip condition by setting the vorticity 0 at the wall. 
       ! LHS and RHS modifies for an implicit solve 
       type(block_type), intent(in)  :: blocks(:)
-      real(dp), intent(in)          :: d_psi(:)
+      real(dp), intent(in)          :: d_psi_n(:)
       real(dp), intent(inout)       :: A_step(:,:), b_step(:)
 
       integer   :: iblock, k, row_index, i_basis, j_basis
-      integer   :: col_omega 
+      integer   :: col_psi, col_omega
       integer   :: global_point_offset 
-      real(dp)  :: x, y, N_val, M_val 
-      real(dp)  :: omega_wall_val 
+      real(dp)  :: x, y, N_val, M_val, d2N_dx2, d2M_dy2
+      real(dp)  :: omega_wall_val, laplacian_psi
 
       global_point_offset = 0 
 
@@ -309,19 +309,38 @@ module mod_solver
             x = blocks(iblock)%colloc_pts(k, 1)
             y = blocks(iblock)%colloc_pts(k, 2)
 
-            ! TODO: calculate required wall vorticity
+            ! calculate required wall vorticity
+            ! omega = -laplacian(psi)
             omega_wall_val = 0.0d0 ! placeholder
-
-            A_step(row_index, :)  = 0.0d0 
-            b_step(row_index)     = omega_wall_val
 
             ! omega_at_point = omega_wall_val
             do j_basis = 1, blocks(iblock)%N_y 
               do i_basis = 1, blocks(iblock)%N_x
-                col_omega = get_global_omega_index(iblock, i_basis, j_basis)
+                col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
+
                 N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
                 M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                A_step(row_index, col_omega) = N_val * M_val
+                d2N_dx2   = bspline_deriv2(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
+                d2M_dy2   = bspline_deriv2(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+
+                laplacian_psi = d_psi_n(col_psi) * (d2N_dx2 * M_val + N_val * d2M_dy2)
+
+                omega_wall_val = omega_wall_val - laplacian_psi
+              enddo 
+            enddo 
+
+            A_step(row_index, :)  = 0.0d0 
+            b_step(row_index)     = omega_wall_val  ! this is the RHS of the equation = omega_wall_val
+
+            ! now we need to enforce it to the LHS too 
+            do j_basis = 1, blocks(iblock)%N_y 
+              do i_basis = 1, blocks(iblock)%N_x
+                col_omega = get_global_omega_index(iblock, i_basis, j_basis)
+
+                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
+                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+                A_step(row_index, col_omega) = N_val * M_val ! this is the LHS = d_omega * N * M  
+
               enddo 
             enddo 
           end select 
