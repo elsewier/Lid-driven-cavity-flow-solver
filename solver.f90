@@ -19,11 +19,6 @@ module mod_solver
     
   contains 
     ! calculates and stores the number of coefficients and the starting index/offset for each block
-    ! 1 - all psi coeffs from block1 
-    ! 2 - all psi coeffs from block2 
-    ! 3 - all omega coeffs from block1
-    ! 4 - all omega coeffs from block2
-    ! {x} = [C_B1 | C_B2 | D_B1 | D_B2]
     subroutine initialize_solver(blocks)
       type(block_type), intent(in) :: blocks(:)
       integer :: total_psi_coeffs
@@ -31,12 +26,14 @@ module mod_solver
       num_coeffs_b1 = blocks(1)%N_x * blocks(1)%N_y
       num_coeffs_b2 = blocks(2)%N_x * blocks(2)%N_y
 
+      total_psi_coeffs = num_coeffs_b1 + num_coeffs_b2 
+
       ! block1 psi coeffs starts at 0 offset, block2 start after block1 
       psi_offset_b1 = 0 
       psi_offset_b2 = num_coeffs_b1
       ! block1 omega coeffs start after all psi coeffs 
-      omega_offset_b1 = total_psi_coeffs 
-      omega_offset_b2 = total_psi_coeffs + num_coeffs_b1
+      omega_offset_b1 = 0
+      omega_offset_b2 = num_coeffs_b1
     end subroutine initialize_solver
 
     function get_global_psi_index(block_id, i, j) result(global_index)
@@ -96,7 +93,7 @@ module mod_solver
           do j_basis = 1, blocks(iblock)%N_y 
             do i_basis = 1, blocks(iblock)%N_x
               col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
-              col_omega = get_global_psi_index(iblock, i_basis, j_basis)
+              col_omega = get_global_omega_index(iblock, i_basis, j_basis)
               N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
               M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
 
@@ -173,7 +170,7 @@ module mod_solver
                 col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
                 N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
                 dM_dy     = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                A_psi(row_index, col_psi) = N_val * M_val
+                A_psi(row_index, col_psi) = N_val * dM_dy
               enddo 
             enddo 
             b_psi_bc(row_index) = u_lid
@@ -210,8 +207,8 @@ module mod_solver
                 do i_basis = 1, blocks(1)%N_x 
                   col_psi   = get_global_psi_index(1, i_basis, j_basis)
                   N_val     = bspline_basis(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x)
-                  M_val     = bspline_basis(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y)
-                  A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + (N_val * M_val) 
+                  dM_dy     = bspline_deriv1(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y)
+                  A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + (N_val * dM_dy) 
                 enddo 
               enddo 
 
@@ -220,8 +217,8 @@ module mod_solver
                 do i_basis = 1, blocks(2)%N_x 
                   col_psi   = get_global_psi_index(2, i_basis, j_basis)
                   N_val     = bspline_basis(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x)
-                  M_val     = bspline_basis(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y)
-                  A_psi(row_index, col_psi) = A_psi(row_index, col_psi) - (N_val * M_val) 
+                  dM_dy     = bspline_deriv1(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y)
+                  A_psi(row_index, col_psi) = A_psi(row_index, col_psi) - (N_val * dM_dy) 
                 enddo 
               enddo 
             end if 
@@ -362,8 +359,10 @@ module mod_solver
         ! write(*,*) "d_omega_n", d_omega_n
         write(*,*) 'shape M', shape(M)
         write(*,*) 'd_omega_n', shape(d_omega_n)
+        write(*,*) 'M:' ,M(33,1:10)
+        write(*,*) 'd_omega_n', d_omega_n(1:10)
 
-        b_step = matmul(M, d_omega_n) !+ (dt * rk_alpha(1) * diffusion_coeff) * matmul(K, d_omega_n) + dt * rk_gamma(1) * N_n 
+        b_step = matmul(M, d_omega_n) + (dt * rk_alpha(1) * diffusion_coeff) * matmul(K, d_omega_n) + dt * rk_gamma(1) * N_n 
         write(*,*) 'here'
         ! [A1] = [M] - dt * beta1 * (1/Re) * [K]
         A_step = M - (dt * rk_beta(1) * diffusion_coeff) * K 
