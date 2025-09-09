@@ -71,7 +71,10 @@ module mod_params
         integer, parameter :: BTYPE_WALL                = 2  
         integer, parameter :: BTYPE_INTERFACE           = 3
 
-
+        ! LAPACK variables 
+        integer, allocatable  :: piv(:) ! Pivot indices for dgesv 
+        integer               :: linfo  ! status flag from lapack 
+        real(dp), allocatable :: A_psi_copy(:,:) ! to save A_psi during RK3
 end module mod_params
 
 

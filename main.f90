@@ -77,6 +77,8 @@ program L_shaped_cavity_solver
   allocate(d_omega_s1(N), d_omega_s2(N))
   allocate(N_omega_n(N), N_omega_s1(N), N_omega_s2(N))
   allocate(A_step(N, N), b_step(N))
+  allocate(piv(N)) ! lapack 
+  allocate(A_psi_copy(N,N)) ! copy for psi during RK3
 
 
   ! initial conditions 
@@ -111,8 +113,9 @@ program L_shaped_cavity_solver
                            d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
                            N_omega_n, N_omega_s1, N_omega_s2)
 
-    ! TODO: Placeholder for Lapack call
-    d_omega_s1 = 0.0d0 ! replace this with lapack solver
+    ! solve the system A_step * x = b_step 
+    call DGESV(N, 1, A_step, N, piv, b_step, N, linfo)
+    d_omega_s1 = b_step ! dgesv puts the solution into b_step
     write(*,*) 'step1 complete'
 
     ! ====================================================================
@@ -126,8 +129,8 @@ program L_shaped_cavity_solver
                            d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
                            N_omega_n, N_omega_s1, N_omega_s2)
 
-    ! TODO: Placeholder for Lapack call
-    d_omega_s2 = 0.0d0 ! replace this with lapack solver
+    call DGESV(N, 1, A_step, N, piv, b_step, N, linfo)
+    d_omega_s2 = b_step ! dgesv puts the solution into b_step
     write(*,*) 'step2 complete'
 
     ! ====================================================================
@@ -141,9 +144,9 @@ program L_shaped_cavity_solver
                            d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
                            N_omega_n, N_omega_s1, N_omega_s2)
 
-    ! Solver for d_omega_new (the final vorticity at the end of the time step)
-    ! TODO: Placeholder for Lapack call
-    d_omega_new = 0.0d0 ! replace this with lapack solver
+    ! for d_omega_new (the final vorticity at the end of the time step)
+    call DGESV(N, 1, A_step, N, piv, b_step, N, linfo)
+    d_omega_new = b_step
     write(*,*) 'step3 complete'
 
     ! ====================================================================
@@ -153,8 +156,10 @@ program L_shaped_cavity_solver
     call apply_psi_bcs(blocks, A_psi, b_psi_bc, t * dt) ! 
     b_psi_total = matmul(-M_omega, d_omega_new) + b_psi_bc
 
-    ! TODO: call dgesv to solve for d_psi_new
-    d_psi_new = 0.0d0
+    A_psi_copy = A_psi 
+
+    call DGESV(N, 1, A_psi_copy, N, piv, b_psi_total, N, linfo)
+    d_psi_new = b_psi_total
 
     ! output
     if (mod(t, output_interval) == 0) then
@@ -167,6 +172,7 @@ program L_shaped_cavity_solver
   deallocate(A_psi, M_omega, d_psi_old, d_omega_old, d_psi_new, d_omega_new)
   deallocate(b_psi_total, b_psi_bc, b_omega_rhs)
   deallocate(K_omega, A_step, b_step, d_omega_s1, d_omega_s2, N_omega_n, N_omega_s1, N_omega_s2)
+  deallocate(piv, A_psi_copy)
   do iblock = 1, NUM_BLOCKS 
     deallocate(blocks(iblock)%colloc_pts, blocks(iblock)%boundary_types)
     deallocate(blocks(iblock)%knots_x, blocks(iblock)%knots_y)
