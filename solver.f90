@@ -15,6 +15,7 @@ module mod_solver
   public  :: initialize_solver, get_global_psi_index, get_global_omega_index, assemble_constant_matrices, apply_psi_bcs
   public  :: calculate_advection_term, apply_omega_bcs, assemble_rk3_step
   public  :: extract_laplacian_operator 
+  public  :: output_results
 
     
   contains 
@@ -162,7 +163,8 @@ module mod_solver
 
           case (BTYPE_MOVING_LID) ! d(psi)/dy = u_lid(x,t)
             ! TODO: CHANGE THE VELOCITY PROFILE LATER FOR NOW I WILL USE SINUSOIDAL VELOCITY
-            u_lid = sin(acos(-1.0d0) * x) * (0.5d0 * (1.0d0 - cos(acos(-1.0d0) * current_time)))
+            ! u_lid = sin(acos(-1.0d0) * x) * (0.5d0 * (1.0d0 - cos(acos(-1.0d0) * current_time)))
+            u_lid = 1.0d0
 
             A_psi(row_index,:) = 0.0d0 
             do j_basis = 1, blocks(iblock)%N_y 
@@ -481,6 +483,84 @@ module mod_solver
     ! end subroutine assemble_rk3_step3
 
       
+	  ! Add this subroutine to the end of the mod_solver module, replacing the old one.
+
+subroutine output_results(blocks, d_psi, d_omega, timestep, file_prefix)
+    type(block_type), intent(in) :: blocks(:)
+    real(dp), intent(in)         :: d_psi(:), d_omega(:)
+    integer, intent(in)          :: timestep
+    character(len=*), intent(in) :: file_prefix
+
+    character(len=256) :: filename
+    integer, parameter :: out_unit = 20
+    integer :: iblock, k, i_basis, j_basis
+    real(dp) :: x, y, psi_val, omega_val, u_vel, v_vel
+    real(dp) :: N_val, M_val, dN_dx, dM_dy
+    integer :: g_psi_idx   
+    integer :: g_omega_idx
+
+    ! =================================================================
+    ! 1. CONSTRUCT FILENAME & OPEN FILE
+    ! =================================================================
+    ! Create a filename like "results/solution_000100.dat"
+    write(filename, '(A, I0.6, A)') trim(file_prefix), timestep, '.dat'
+    open(unit=out_unit, file=filename, status='replace', action='write')
+
+    ! =================================================================
+    ! 2. WRITE HEADER
+    ! This describes the columns, which is very helpful for post-processing.
+    ! The leading '#' is often used to mark header lines for easy skipping in parsers.
+    ! =================================================================
+    write(out_unit, '(A)') '# Results from L-Shaped Cavity Solver'
+    write(out_unit, '(A, I0, A, F10.6)') '# Timestep: ', timestep
+    write(out_unit, '(A)') '# Columns: X, Y, Streamfunction(psi), Vorticity(omega), U_Velocity, V_Velocity'
+
+    ! =================================================================
+    ! 3. LOOP THROUGH ALL BLOCKS AND POINTS, CALCULATE, AND WRITE DATA
+    ! =================================================================
+    do iblock = 1, NUM_BLOCKS
+        do k = 1, blocks(iblock)%N_x * blocks(iblock)%N_y
+            x = blocks(iblock)%colloc_pts(k, 1)
+            y = blocks(iblock)%colloc_pts(k, 2)
+
+            ! --- Reset accumulators for this point ---
+            psi_val = 0.0_dp
+            omega_val = 0.0_dp
+            u_vel = 0.0_dp
+            v_vel = 0.0_dp
+
+            ! --- Evaluate psi, omega, and velocity at (x,y) by summing basis function contributions ---
+            do j_basis = 1, blocks(iblock)%N_y
+                do i_basis = 1, blocks(iblock)%N_x
+                    ! Get basis functions and their derivatives
+                    N_val = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
+                    dN_dx = bspline_deriv1(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
+                    M_val = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+                    dM_dy = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+
+                    ! Get global indices for the coefficient vectors
+                    g_psi_idx   = get_global_psi_index(iblock, i_basis, j_basis)
+                    g_omega_idx = get_global_omega_index(iblock, i_basis, j_basis)
+                    
+                    ! Sum contributions
+                    psi_val   = psi_val   + d_psi(g_psi_idx) * N_val * M_val
+                    omega_val = omega_val + d_omega(g_omega_idx) * N_val * M_val
+                    u_vel     = u_vel     + d_psi(g_psi_idx) * N_val * dM_dy
+                    v_vel     = v_vel     - d_psi(g_psi_idx) * dN_dx * M_val
+                enddo
+            enddo
+
+            ! --- Write the calculated data for this point as a single line in the file ---
+            write(out_unit, '(6E22.12)') x, y, psi_val, omega_val, u_vel, v_vel
+        enddo
+    enddo
+
+    ! =================================================================
+    ! 4. CLOSE FILE
+    ! =================================================================
+    close(out_unit)
+
+end subroutine output_results
 
 
 

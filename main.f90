@@ -16,10 +16,10 @@ program L_shaped_cavity_solver
   ! TODO: we can write a variable definition module
   
   ! Simulation parameters 
-  real(dp)    :: t_end = 0.01
+  real(dp)    :: t_end = 0.1
   real(dp)    :: dt = 0.001d0 
   integer     :: n_steps 
-  integer     :: output_interval = 100
+  integer     :: output_interval = 1
   real(dp)    :: current_time 
 
   ! multiblock grid data structure 
@@ -93,6 +93,7 @@ program L_shaped_cavity_solver
 
 ! The main time loop
   do t = 1, n_steps
+    write(*,*) "t = ",t
 
     ! ====================================================================
     ! STEP 0: UPDATE STATE FOR THE CURRENT STEP
@@ -106,7 +107,7 @@ program L_shaped_cavity_solver
     ! ====================================================================
     ! Calculate N(omega_n) using the state at the beginning of the step
     call calculate_advection_term(blocks, d_psi_old, d_omega_old, N_omega_n)
-    write(*,*) 'advection term calculated for step 1'
+    ! write(*,*) 'advection term calculated for step 1'
 
     ! Assemble the system for step 1
     call assemble_rk3_step(blocks, 1, A_step, b_step, dt, K_omega, M_omega, &
@@ -116,14 +117,14 @@ program L_shaped_cavity_solver
     ! solve the system A_step * x = b_step 
     call DGESV(N, 1, A_step, N, piv, b_step, N, linfo)
     d_omega_s1 = b_step ! dgesv puts the solution into b_step
-    write(*,*) 'step1 complete'
+    ! write(*,*) 'step1 complete'
 
     ! ====================================================================
     ! L-S RK3 STAGE 2
     ! ====================================================================
     ! Calculate N(omega_s1)
     call calculate_advection_term(blocks, d_psi_old, d_omega_s1, N_omega_s1)
-    write(*,*) 'advection term calculated for step 2'
+    ! write(*,*) 'advection term calculated for step 2'
 
     call assemble_rk3_step(blocks, 2, A_step, b_step, dt, K_omega, M_omega, &
                            d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
@@ -131,14 +132,14 @@ program L_shaped_cavity_solver
 
     call DGESV(N, 1, A_step, N, piv, b_step, N, linfo)
     d_omega_s2 = b_step ! dgesv puts the solution into b_step
-    write(*,*) 'step2 complete'
+    ! write(*,*) 'step2 complete'
 
     ! ====================================================================
     ! L-S RK3 STAGE 3
     ! ====================================================================
     ! Calculate N(omega_s2)
     call calculate_advection_term(blocks, d_psi_old, d_omega_s2, N_omega_s2)
-    write(*,*) 'advection term calculated for step 3'
+    ! write(*,*) 'advection term calculated for step 3'
 
     call assemble_rk3_step(blocks, 3, A_step, b_step, dt, K_omega, M_omega, &
                            d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
@@ -147,7 +148,7 @@ program L_shaped_cavity_solver
     ! for d_omega_new (the final vorticity at the end of the time step)
     call DGESV(N, 1, A_step, N, piv, b_step, N, linfo)
     d_omega_new = b_step
-    write(*,*) 'step3 complete'
+    ! write(*,*) 'step3 complete'
 
     ! ====================================================================
     ! FINAL PSI UPDATE
@@ -164,6 +165,7 @@ program L_shaped_cavity_solver
     ! output
     if (mod(t, output_interval) == 0) then
       write(*,'(A, I6, A, I6, A, F8.4)') "Timestep:", t, "/", n_steps, "  Time:", t * dt
+      call output_results(blocks, d_psi_new, d_omega_new, t, "results/solution_")
     endif
   enddo
 
