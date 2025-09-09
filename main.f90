@@ -76,6 +76,7 @@ program L_shaped_cavity_solver
   allocate(K_omega(N, N))
   allocate(d_omega_s1(N), d_omega_s2(N))
   allocate(N_omega_n(N), N_omega_s1(N), N_omega_s2(N))
+  allocate(A_step(N, N), b_step(N))
 
 
   ! initial conditions 
@@ -83,6 +84,7 @@ program L_shaped_cavity_solver
 
   write(*,*) "2. Assembling time-independent matrices..."
   call assemble_constant_matrices(blocks, A_psi, M_psi, M_omega)
+  call extract_laplacian_operator(blocks, A_psi, K_omega)
 
   write(*,*) "3. Starting time-stepping loop..."
   n_steps = ceiling(t_end / dt)
@@ -164,6 +166,7 @@ program L_shaped_cavity_solver
   ! clean up TODO: write a module for this maybe 
   deallocate(A_psi, M_omega, d_psi_old, d_omega_old, d_psi_new, d_omega_new)
   deallocate(b_psi_total, b_psi_bc, b_omega_rhs)
+  deallocate(K_omega, A_step, b_step, d_omega_s1, d_omega_s2, N_omega_n, N_omega_s1, N_omega_s2)
   do iblock = 1, NUM_BLOCKS 
     deallocate(blocks(iblock)%colloc_pts, blocks(iblock)%boundary_types)
     deallocate(blocks(iblock)%knots_x, blocks(iblock)%knots_y)

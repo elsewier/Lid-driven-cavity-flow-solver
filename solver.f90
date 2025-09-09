@@ -191,7 +191,7 @@ module mod_solver
               ! coeffs from block2 multiplied by -1
               do j_basis = 1, blocks(2)%N_y 
                 do i_basis = 1, blocks(2)%N_x
-                  col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
+                  col_psi   = get_global_psi_index(2, i_basis, j_basis)
                   N_val     = bspline_basis(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x)
                   M_val     = bspline_basis(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y)
                   A_psi(row_index, col_psi) = A_psi(row_index, col_psi) - (N_val * M_val)
@@ -271,7 +271,7 @@ module mod_solver
 
               ! calculate vorticity gradients: d(omega)/dx, d(omega)/dy 
               domega_dx = domega_dx + d_omega(global_omega) * (dN_dx * M_val)
-              domega_dy = domega_dy + d_omega(global_omega) * (N_val * M_val)
+              domega_dy = domega_dy + d_omega(global_omega) * (N_val * dM_dy)
             enddo 
           enddo 
 
@@ -356,14 +356,7 @@ module mod_solver
       select case (step_num)
       case (1)
         ! {b1} = M*d_omega_n + dt * alpha1*(1/Re)*K*d_omega_n + dt*gamma1*N_n 
-        ! write(*,*) "d_omega_n", d_omega_n
-        write(*,*) 'shape M', shape(M)
-        write(*,*) 'd_omega_n', shape(d_omega_n)
-        write(*,*) 'M:' ,M(33,1:10)
-        write(*,*) 'd_omega_n', d_omega_n(1:10)
-
         b_step = matmul(M, d_omega_n) + (dt * rk_alpha(1) * diffusion_coeff) * matmul(K, d_omega_n) + dt * rk_gamma(1) * N_n 
-        write(*,*) 'here'
         ! [A1] = [M] - dt * beta1 * (1/Re) * [K]
         A_step = M - (dt * rk_beta(1) * diffusion_coeff) * K 
       case (2)
