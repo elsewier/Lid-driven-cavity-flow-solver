@@ -156,7 +156,7 @@ module mod_solver
                 col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
                 N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
                 M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                A_psi(row_index, col_psi) = N_val * M_val
+                A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + N_val * M_val
               enddo 
             enddo 
             b_psi_bc(row_index) = 0.0d0
@@ -172,7 +172,7 @@ module mod_solver
                 col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
                 N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
                 dM_dy     = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                A_psi(row_index, col_psi) = N_val * dM_dy
+                A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + N_val * dM_dy
               enddo 
             enddo 
             b_psi_bc(row_index) = u_lid
