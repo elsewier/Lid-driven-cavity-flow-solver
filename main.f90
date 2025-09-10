@@ -72,7 +72,6 @@ program L_shaped_cavity_solver
                            d_omega_old, d_psi_old, d_omega_s1, d_omega_s2, &
                            N_omega_n, N_omega_s1, N_omega_s2)
     call DGESV(N, 1, A_step, N, piv, b_step, N, linfo)
-    ! *** FIX: ADD ERROR CHECKING ***
     if (linfo /= 0) then
         write(*,*) "FATAL: DGESV failed in RK3 Step 1 at t=", t, " with code=", linfo
         stop
