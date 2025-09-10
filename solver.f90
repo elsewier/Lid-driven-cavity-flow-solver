@@ -73,50 +73,60 @@ module mod_solver
     !   A_psi :  the global laplacian matrix for the streamfunction
     !   M_psi :  the global mass matrix for the streamfunction
     !   M_omega: the global mass matrix for the vorticity 
+    !   NOTE: bspline operates on normalized coord system. we need to scale it
     subroutine assemble_constant_matrices(blocks, A_psi, M_psi, M_omega)
       type(block_type), intent(in)  :: blocks(:)
       real(dp), intent(out)         :: A_psi(:,:), M_psi(:,:), M_omega(:,:)
 
       integer                       :: iblock, k, row_index, i_basis, j_basis 
       integer                       :: col_psi, col_omega 
-      real(dp)                      :: x, y
-      real(dp)                      :: N_val, M_val, d2N_dx2, d2M_dy2
+      real(dp)                      :: x, y, u_norm, v_norm 
+      real(dp)                      :: N_val, M_val, d2N_dx2_scaled, d2M_dy2_scaled
+      real(dp)                      :: jac_x, jac_y, jac_x2, jac_y2
       integer                       :: global_point_offset
 
       A_psi = 0.0d0; M_psi = 0.0d0; M_omega = 0.0d0; global_point_offset = 0
 
       do iblock = 1, NUM_BLOCKS
+        jac_x   = 1.0d0 / (blocks(iblock)%xmax - blocks(iblock)%xmin)
+        jac_y   = 1.0d0 / (blocks(iblock)%ymax - blocks(iblock)%ymin)
+        jac_x2  = jac_x * jac_x
+        jac_y2  = jac_y * jac_y
+
         do k = 1, blocks(iblock)%N_x * blocks(iblock)%N_y 
           row_index = global_point_offset + k 
           x = blocks(iblock)%colloc_pts(k, 1)
           y = blocks(iblock)%colloc_pts(k, 2)
+          u_norm = (x - blocks(iblock)%xmin) * jac_x
+          v_norm = (y - blocks(iblock)%ymin) * jac_y
+
 
           do j_basis = 1, blocks(iblock)%N_y 
             do i_basis = 1, blocks(iblock)%N_x
               col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
               col_omega = get_global_omega_index(iblock, i_basis, j_basis)
-              N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-              M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+              N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm)
+              M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm)
 
-              M_psi(row_index, col_psi) = N_val * M_val 
-              M_omega(row_index, col_omega) = N_val * M_val 
+              M_psi(row_index, col_psi) = M_psi(row_index, col_psi) + N_val * M_val 
+              M_omega(row_index, col_omega) = M_omega(row_index, col_omega) + N_val * M_val 
             enddo 
           enddo 
 
-          ! for the A_psi, we only apply the nabla^2 operator at interior points. the boundary rows will be overwritten with BC 
-          if (blocks(iblock)%boundary_types(k) == BTYPE_INTERIOR) then 
+          ! ! for the A_psi, we only apply the nabla^2 operator at interior points. the boundary rows will be overwritten with BC 
+          ! if (blocks(iblock)%boundary_types(k) == BTYPE_INTERIOR) then 
           do j_basis = 1, blocks(iblock)%N_y 
             do i_basis = 1, blocks(iblock)%N_x
               col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
-              N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-              M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-              d2N_dx2   = bspline_deriv2(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-              d2M_dy2   = bspline_deriv2(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+              N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm)
+              M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm)
+              d2N_dx2_scaled   = bspline_deriv2(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm) * jac_x2
+              d2M_dy2_scaled   = bspline_deriv2(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm) * jac_y2
 
-              A_psi(row_index, col_psi) = d2N_dx2 * M_val + N_val * d2M_dy2
+              A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + d2N_dx2_scaled * M_val + N_val * d2M_dy2_scaled
             enddo 
           enddo 
-        endif
+        ! endif
         enddo 
         global_point_offset = global_point_offset + (blocks(iblock)%N_x * blocks(iblock)%N_y)
       enddo 
@@ -131,19 +141,26 @@ module mod_solver
       integer                       :: iblock, k, row_index, i_basis, j_basis 
       integer                       :: col_psi
       integer                       :: global_point_offset
-      real(dp)                      :: x, y
-      real(dp)                      :: N_val, M_val, dM_dy 
+      real(dp)                      :: x, y, u_norm, v_norm
+      real(dp)                      :: N_val, M_val, dM_dy_scaled
       real(dp)                      :: u_lid
+      real(dp)                      :: jac_x, jac_y
+      real(dp)                      :: u1, v1, jac_y1
+      real(dp)                      :: u2, v2, jac_y2
       
 
       b_psi_bc = 0.0d0; global_point_offset = 0
 
       ! loop through all blocks and all points 
       do iblock = 1, NUM_BLOCKS
+        jac_x   = 1.0d0 / (blocks(iblock)%xmax - blocks(iblock)%xmin)
+        jac_y   = 1.0d0 / (blocks(iblock)%ymax - blocks(iblock)%ymin)
         do k = 1, blocks(iblock)%N_x * blocks(iblock)%N_y 
           row_index = global_point_offset + k 
           x = blocks(iblock)%colloc_pts(k, 1)
           y = blocks(iblock)%colloc_pts(k, 2)
+          u_norm = (x - blocks(iblock)%xmin) * jac_x
+          v_norm = (y - blocks(iblock)%ymin) * jac_y
 
           select case (blocks(iblock)%boundary_types(k)) ! we only care about boundaries here
           case (BTYPE_INTERIOR)
@@ -154,8 +171,8 @@ module mod_solver
             do j_basis = 1, blocks(iblock)%N_y 
               do i_basis = 1, blocks(iblock)%N_x
                 col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
-                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm)
+                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm)
                 A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + N_val * M_val
               enddo 
             enddo 
@@ -170,9 +187,9 @@ module mod_solver
             do j_basis = 1, blocks(iblock)%N_y 
               do i_basis = 1, blocks(iblock)%N_x
                 col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
-                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                dM_dy     = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + N_val * dM_dy
+                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm)
+                dM_dy_scaled     = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm) * jac_y
+                A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + N_val * dM_dy_scaled
               enddo 
             enddo 
             b_psi_bc(row_index) = u_lid
@@ -180,12 +197,25 @@ module mod_solver
           case (BTYPE_INTERFACE) ! enforce continuity and derivative equivalance
             A_psi(row_index, :) = 0.0d0 
 
+            ! NOTE: the coordinates (x,y) on the interface are physically same for both blocks
+            ! we need to map (x,y) to the normalized coordinates of each block 
+            ! 
+            ! block 1 
+            jac_y1  = 1.0d0 / (blocks(1)%ymax - blocks(1)%ymin)
+            u1      = (x - blocks(1)%xmin) / (blocks(1)%xmax - blocks(1)%xmin)
+            v1      = (y - blocks(1)%ymin) / (blocks(1)%ymax - blocks(1)%ymin)
+
+            ! block 2 
+            jac_y2  = 1.0d0 / (blocks(2)%ymax - blocks(2)%ymin)
+            u2      = (x - blocks(2)%xmin) / (blocks(2)%xmax - blocks(2)%xmin)
+            v2      = (y - blocks(2)%ymin) / (blocks(2)%ymax - blocks(2)%ymin)
+
             if (iblock == 1) then ! psi_1 - psi_2 = 0, coefficient multiplied by +1 
               do j_basis = 1, blocks(1)%N_y 
                 do i_basis = 1, blocks(1)%N_x
-                  col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
-                  N_val     = bspline_basis(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x)
-                  M_val     = bspline_basis(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y)
+                  col_psi   = get_global_psi_index(1, i_basis, j_basis)
+                  N_val     = bspline_basis(i_basis, blocks(1)%P_x, blocks(1)%knots_x, u1)
+                  M_val     = bspline_basis(j_basis, blocks(1)%P_y, blocks(1)%knots_y, v1)
                   A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + (N_val * M_val)
                 enddo 
               enddo 
@@ -194,8 +224,8 @@ module mod_solver
               do j_basis = 1, blocks(2)%N_y 
                 do i_basis = 1, blocks(2)%N_x
                   col_psi   = get_global_psi_index(2, i_basis, j_basis)
-                  N_val     = bspline_basis(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x)
-                  M_val     = bspline_basis(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y)
+                  N_val     = bspline_basis(i_basis, blocks(2)%P_x, blocks(2)%knots_x, u2)
+                  M_val     = bspline_basis(j_basis, blocks(2)%P_y, blocks(2)%knots_y, v2)
                   A_psi(row_index, col_psi) = A_psi(row_index, col_psi) - (N_val * M_val)
                 enddo 
               enddo 
@@ -208,9 +238,9 @@ module mod_solver
               do j_basis = 1, blocks(1)%N_y 
                 do i_basis = 1, blocks(1)%N_x 
                   col_psi   = get_global_psi_index(1, i_basis, j_basis)
-                  N_val     = bspline_basis(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x)
-                  dM_dy     = bspline_deriv1(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y)
-                  A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + (N_val * dM_dy) 
+                  N_val     = bspline_basis(i_basis, blocks(1)%P_x, blocks(1)%knots_x, u1)
+                  dM_dy_scaled     = bspline_deriv1(j_basis, blocks(1)%P_y, blocks(1)%knots_y, v1) * jac_y1
+                  A_psi(row_index, col_psi) = A_psi(row_index, col_psi) + (N_val * dM_dy_scaled) 
                 enddo 
               enddo 
 
@@ -218,9 +248,9 @@ module mod_solver
               do j_basis = 1, blocks(2)%N_y 
                 do i_basis = 1, blocks(2)%N_x 
                   col_psi   = get_global_psi_index(2, i_basis, j_basis)
-                  N_val     = bspline_basis(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x)
-                  dM_dy     = bspline_deriv1(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y)
-                  A_psi(row_index, col_psi) = A_psi(row_index, col_psi) - (N_val * dM_dy) 
+                  N_val     = bspline_basis(i_basis, blocks(2)%P_x, blocks(2)%knots_x, u2)
+                  dM_dy_scaled     = bspline_deriv1(j_basis, blocks(2)%P_y, blocks(2)%knots_y, v2) * jac_y2
+                  A_psi(row_index, col_psi) = A_psi(row_index, col_psi) - (N_val * dM_dy_scaled) 
                 enddo 
               enddo 
             end if 
@@ -241,12 +271,15 @@ module mod_solver
       integer   :: global_psi, global_omega
       integer   :: row_index
       integer   :: global_point_offset
-      real(dp)  :: x, y, u_vel, v_vel, domega_dx, domega_dy 
-      real(dp)  :: N_val, M_val, dN_dx, dM_dy 
+      real(dp)  :: x, y, u_norm, v_norm, u_vel, v_vel, domega_dx, domega_dy 
+      real(dp)  :: N_val, M_val, dN_dx_scaled, dM_dy_scaled 
+      real(dp)  :: jac_x, jac_y
 
       adv_term_vec = 0.0d0; global_point_offset = 0
 
       do iblock = 1, NUM_BLOCKS
+        jac_x   = 1.0d0 / (blocks(iblock)%xmax - blocks(iblock)%xmin)
+        jac_y   = 1.0d0 / (blocks(iblock)%ymax - blocks(iblock)%ymin)
         do k = 1, blocks(iblock)%N_x * blocks(iblock)%N_y 
         
           ! we only need to calculate this at interior points 
@@ -254,6 +287,8 @@ module mod_solver
 
           x = blocks(iblock)%colloc_pts(k, 1)
           y = blocks(iblock)%colloc_pts(k, 2)
+          u_norm = (x - blocks(iblock)%xmin) * jac_x
+          v_norm = (y - blocks(iblock)%ymin) * jac_y
 
           u_vel = 0.0d0; v_vel = 0.0d0; domega_dx = 0.0d0; domega_dy = 0.0d0
 
@@ -262,18 +297,18 @@ module mod_solver
               global_psi    = get_global_psi_index(iblock, i_basis, j_basis)
               global_omega  = get_global_omega_index(iblock, i_basis, j_basis)
 
-              N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-              M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-              dN_dx     = bspline_deriv1(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-              dM_dy     = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+              N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm)
+              M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm)
+              dN_dx_scaled     = bspline_deriv1(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm) * jac_x
+              dM_dy_scaled     = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm) * jac_y
 
               ! calculate velocities: u = d(psi)/dy, v = -d(psi)/dx 
-              u_vel = u_vel + d_psi(global_psi) * (N_val * dM_dy)
-              v_vel = v_vel - d_psi(global_psi) * (dN_dx * M_val)
+              u_vel = u_vel + d_psi(global_psi) * (N_val * dM_dy_scaled)
+              v_vel = v_vel - d_psi(global_psi) * (dN_dx_scaled * M_val)
 
               ! calculate vorticity gradients: d(omega)/dx, d(omega)/dy 
-              domega_dx = domega_dx + d_omega(global_omega) * (dN_dx * M_val)
-              domega_dy = domega_dy + d_omega(global_omega) * (N_val * dM_dy)
+              domega_dx = domega_dx + d_omega(global_omega) * (dN_dx_scaled * M_val)
+              domega_dy = domega_dy + d_omega(global_omega) * (N_val * dM_dy_scaled)
             enddo 
           enddo 
 
@@ -296,12 +331,18 @@ module mod_solver
       integer   :: iblock, k, row_index, i_basis, j_basis
       integer   :: col_psi, col_omega
       integer   :: global_point_offset 
-      real(dp)  :: x, y, N_val, M_val, d2N_dx2, d2M_dy2
+      integer   :: i_local, j_local
+      real(dp)  :: x, y, u_norm, v_norm, N_val, M_val, d2N_dx2_scaled, d2M_dy2_scaled
       real(dp)  :: omega_wall_val, laplacian_psi
+      real(dp)  :: jac_x, jac_y, jac_x2, jac_y2
 
       global_point_offset = 0 
 
       do iblock = 1, NUM_BLOCKS
+        jac_x   = 1.0d0 / (blocks(iblock)%xmax - blocks(iblock)%xmin)
+        jac_y   = 1.0d0 / (blocks(iblock)%ymax - blocks(iblock)%ymin)
+        jac_x2  = jac_x * jac_x
+        jac_y2  = jac_y * jac_y
         do k = 1, blocks(iblock)%N_x * blocks(iblock)%N_y 
           row_index = global_point_offset + k 
 
@@ -310,28 +351,33 @@ module mod_solver
           case (BTYPE_WALL, BTYPE_MOVING_LID)
             x = blocks(iblock)%colloc_pts(k, 1)
             y = blocks(iblock)%colloc_pts(k, 2)
+            u_norm = (x - blocks(iblock)%xmin) * jac_x
+            v_norm = (y - blocks(iblock)%ymin) * jac_y
 
             ! calculate required wall vorticity
             ! omega = -laplacian(psi)
-            omega_wall_val = 0.0d0 ! placeholder
+            omega_wall_val = 0.0d0 
 
             ! omega_at_point = omega_wall_val
             do j_basis = 1, blocks(iblock)%N_y 
               do i_basis = 1, blocks(iblock)%N_x
                 col_psi   = get_global_psi_index(iblock, i_basis, j_basis)
 
-                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                d2N_dx2   = bspline_deriv2(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                d2M_dy2   = bspline_deriv2(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm)
+                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm)
+                d2N_dx2_scaled   = bspline_deriv2(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm) * jac_x2
+                d2M_dy2_scaled   = bspline_deriv2(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm) * jac_y2
 
-                laplacian_psi = d_psi_n(col_psi) * (d2N_dx2 * M_val + N_val * d2M_dy2)
+                laplacian_psi = d_psi_n(col_psi) * (d2N_dx2_scaled * M_val + N_val * d2M_dy2_scaled)
 
                 omega_wall_val = omega_wall_val - laplacian_psi
               enddo 
             enddo 
 
             A_step(row_index, :)  = 0.0d0 
+            j_local = (k - 1) / blocks(iblock)%N_x + 1 
+            i_local = mod(k - 1, blocks(iblock)%N_x) + 1
+            A_step(row_index, get_global_omega_index(iblock, i_local, j_local)) = 1.0d0 ! dirichlet bc
             b_step(row_index)     = omega_wall_val  ! this is the RHS of the equation = omega_wall_val
 
             ! now we need to enforce it to the LHS too 
@@ -339,9 +385,9 @@ module mod_solver
               do i_basis = 1, blocks(iblock)%N_x
                 col_omega = get_global_omega_index(iblock, i_basis, j_basis)
 
-                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                A_step(row_index, col_omega) = N_val * M_val ! this is the LHS = d_omega * N * M  
+                N_val     = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm)
+                M_val     = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm)
+                A_step(row_index, col_omega) = A_step(row_index, col_omega) + N_val * M_val ! this is the LHS = d_omega * N * M  
 
               enddo 
             enddo 
@@ -494,86 +540,53 @@ subroutine output_results(blocks, d_psi, d_omega, timestep, file_prefix)
     character(len=256) :: filename
     integer, parameter :: out_unit = 20
     integer :: iblock, k, i_basis, j_basis
-    real(dp) :: x, y, psi_val, omega_val, u_vel, v_vel
+    real(dp) :: x, y, u_norm, v_norm, psi_val, omega_val, u_vel, v_vel
     real(dp) :: N_val, M_val, dN_dx, dM_dy
-    integer :: g_psi_idx   
-    integer :: g_omega_idx
+    real(dp) :: jac_x, jac_y
+    integer :: g_psi_idx, g_omega_idx
 
-    ! =================================================================
-    ! 1. CONSTRUCT FILENAME & OPEN FILE
-    ! =================================================================
-    ! Create a filename like "results/solution_000100.dat"
     write(filename, '(A, I0.6, A)') trim(file_prefix), timestep, '.dat'
     open(unit=out_unit, file=filename, status='replace', action='write')
 
-    ! =================================================================
-    ! 2. WRITE HEADER
-    ! This describes the columns, which is very helpful for post-processing.
-    ! The leading '#' is often used to mark header lines for easy skipping in parsers.
-    ! =================================================================
-    write(out_unit, '(A)') '# Results from L-Shaped Cavity Solver'
-    write(out_unit, '(A, I0, A, F10.6)') '# Timestep: ', timestep
     write(out_unit, '(A)') '# Columns: X, Y, Streamfunction(psi), Vorticity(omega), U_Velocity, V_Velocity'
 
-    ! =================================================================
-    ! 3. LOOP THROUGH ALL BLOCKS AND POINTS, CALCULATE, AND WRITE DATA
-    ! =================================================================
     do iblock = 1, NUM_BLOCKS
+        ! --- DEFINE SCALING FACTORS (JACOBIANS) FOR THIS BLOCK ---
+        jac_x = 1.0_dp / (blocks(iblock)%xmax - blocks(iblock)%xmin)
+        jac_y = 1.0_dp / (blocks(iblock)%ymax - blocks(iblock)%ymin)
+
         do k = 1, blocks(iblock)%N_x * blocks(iblock)%N_y
             x = blocks(iblock)%colloc_pts(k, 1)
             y = blocks(iblock)%colloc_pts(k, 2)
 
-            ! --- Reset accumulators for this point ---
-            psi_val = 0.0_dp
-            omega_val = 0.0_dp
-            u_vel = 0.0_dp
-            v_vel = 0.0_dp
+            ! --- MAP PHYSICAL COORDS (x,y) TO NORMALIZED COORDS (u_norm, v_norm) ---
+            u_norm = (x - blocks(iblock)%xmin) * jac_x
+            v_norm = (y - blocks(iblock)%ymin) * jac_y
 
-            ! --- Evaluate psi, omega, and velocity at (x,y) by summing basis function contributions ---
+            psi_val = 0.0_dp; omega_val = 0.0_dp; u_vel = 0.0_dp; v_vel = 0.0_dp
+
             do j_basis = 1, blocks(iblock)%N_y
                 do i_basis = 1, blocks(iblock)%N_x
-                    ! Get basis functions and their derivatives
-                    N_val = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                    dN_dx = bspline_deriv1(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x)
-                    M_val = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
-                    dM_dy = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y)
+                    ! --- EVALUATE USING NORMALIZED COORDS AND SCALE DERIVATIVES ---
+                    N_val = bspline_basis(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm)
+                    dN_dx = bspline_deriv1(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, u_norm) * jac_x
+                    M_val = bspline_basis(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm)
+                    dM_dy = bspline_deriv1(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, v_norm) * jac_y
 
-                    ! Get global indices for the coefficient vectors
                     g_psi_idx   = get_global_psi_index(iblock, i_basis, j_basis)
                     g_omega_idx = get_global_omega_index(iblock, i_basis, j_basis)
-                    
-                    ! Sum contributions
+
                     psi_val   = psi_val   + d_psi(g_psi_idx) * N_val * M_val
                     omega_val = omega_val + d_omega(g_omega_idx) * N_val * M_val
                     u_vel     = u_vel     + d_psi(g_psi_idx) * N_val * dM_dy
                     v_vel     = v_vel     - d_psi(g_psi_idx) * dN_dx * M_val
                 enddo
             enddo
-
-            ! --- Write the calculated data for this point as a single line in the file ---
             write(out_unit, '(6E22.12)') x, y, psi_val, omega_val, u_vel, v_vel
         enddo
     enddo
-
-    ! =================================================================
-    ! 4. CLOSE FILE
-    ! =================================================================
     close(out_unit)
-
 end subroutine output_results
-
-
-
-
-
-
-
-              
-
-
-
-
-
 
 
 end module mod_solver
