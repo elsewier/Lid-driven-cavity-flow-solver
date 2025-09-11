@@ -21,18 +21,18 @@ module mod_params
         ! =============================================================================
         ! CONFIGURATION 1: Degree p=3, Multiplicity m=3 (C^0 Continuity)
         ! =============================================================================
-        integer, parameter :: P_x = 3, P_y = 3 ! B-spline degrees
-        ! BLOCK 1 (bottom left block)
-        integer, parameter :: NX_B1 = 49 ! (49 - 3 - 1) = 45, which is divisible by 3.
-        integer, parameter :: NY_B1 = 16 ! (16 - 3 - 1) = 12, which is divisible by 3.
-        ! BLOCK 2 (top block)
-        integer, parameter :: NX_B2_PART1 = NX_B1
-        integer, parameter :: NX_B2_PART2 = 22 ! NX_B2=70. (70-3-1)=66, divisible by 3.
-        integer, parameter :: NX_B2 = NX_B2_PART1 + NX_B2_PART2 - 1 
-        integer, parameter :: NY_B2 = 25 ! (25-3-1)=21, divisible by 3.
-        ! --- Knot Multiplicity ---
-        integer, parameter :: MULT_X_B1 = 3, MULT_Y_B1 = 3
-        integer, parameter :: MULT_X_B2 = 3, MULT_Y_B2 = 3
+        ! integer, parameter :: P_x = 3, P_y = 3 ! B-spline degrees
+        ! ! BLOCK 1 (bottom left block)
+        ! integer, parameter :: NX_B1 = 49 ! (49 - 3 - 1) = 45, which is divisible by 3.
+        ! integer, parameter :: NY_B1 = 16 ! (16 - 3 - 1) = 12, which is divisible by 3.
+        ! ! BLOCK 2 (top block)
+        ! integer, parameter :: NX_B2_PART1 = NX_B1
+        ! integer, parameter :: NX_B2_PART2 = 22 ! NX_B2=70. (70-3-1)=66, divisible by 3.
+        ! integer, parameter :: NX_B2 = NX_B2_PART1 + NX_B2_PART2 - 1 
+        ! integer, parameter :: NY_B2 = 25 ! (25-3-1)=21, divisible by 3.
+        ! ! --- Knot Multiplicity ---
+        ! integer, parameter :: MULT_X_B1 = 3, MULT_Y_B1 = 3
+        ! integer, parameter :: MULT_X_B2 = 3, MULT_Y_B2 = 3
 
         ! =============================================================================
         ! CONFIGURATION 2: Degree p=4, Multiplicity m=3 (C^1 Continuity)
@@ -55,19 +55,18 @@ module mod_params
         ! CONFIGURATION 3: Degree p=5, Multiplicity m=3 (C^2 Continuity)
         ! UNCOMMENT THE BLOCK BELOW TO USE
         ! =============================================================================
-        ! integer, parameter :: P_x = 5, P_y = 5 ! B-spline degrees
-        ! ! BLOCK 1 (bottom left block)
-        ! integer, parameter :: NX_B1 = 52 ! (52 - 5 - 1) = 46 (ERROR). Let's fix. (N-6)%3=0. N must be mult of 3. Use 51.
-        ! integer, parameter :: NX_B1 = 51 ! (51 - 5 - 1) = 45, which is divisible by 3.
-        ! integer, parameter :: NY_B1 = 18 ! (18 - 5 - 1) = 12, which is divisible by 3.
-        ! ! BLOCK 2 (top block)
-        ! integer, parameter :: NX_B2_PART1 = NX_B1
-        ! integer, parameter :: NX_B2_PART2 = 22 ! NX_B2=72. (72-5-1)=66, divisible by 3.
-        ! integer, parameter :: NX_B2 = NX_B2_PART1 + NX_B2_PART2 - 1 
-        ! integer, parameter :: NY_B2 = 24 ! (24-5-1)=18, divisible by 3.
-        ! ! --- Knot Multiplicity ---
-        ! integer, parameter :: MULT_X_B1 = 3, MULT_Y_B1 = 3
-        ! integer, parameter :: MULT_X_B2 = 3, MULT_Y_B2 = 3
+        integer, parameter :: P_x = 5, P_y = 5 ! B-spline degrees
+        ! BLOCK 1 (bottom left block)
+        integer, parameter :: NX_B1 = 51 ! (51 - 5 - 1) = 45, which is divisible by 3.
+        integer, parameter :: NY_B1 = 18 ! (18 - 5 - 1) = 12, which is divisible by 3.
+        ! BLOCK 2 (top block)
+        integer, parameter :: NX_B2_PART1 = NX_B1
+        integer, parameter :: NX_B2_PART2 = 22 ! NX_B2=72. (72-5-1)=66, divisible by 3.
+        integer, parameter :: NX_B2 = NX_B2_PART1 + NX_B2_PART2 - 1 
+        integer, parameter :: NY_B2 = 24 ! (24-5-1)=18, divisible by 3.
+        ! --- Knot Multiplicity ---
+        integer, parameter :: MULT_X_B1 = 3, MULT_Y_B1 = 3
+        integer, parameter :: MULT_X_B2 = 3, MULT_Y_B2 = 3
 
         ! Physical parameters
         ! ... (rest of the module is unchanged) ...
