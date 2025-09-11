@@ -1,0 +1,57 @@
+check_derivatives.f90:81:38:
+
+   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
+      |                                      1
+Error: Symbol ‘x’ at (1) has no IMPLICIT type
+check_derivatives.f90:81:41:
+
+   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
+      |                                         1
+Error: Symbol ‘y’ at (1) has no IMPLICIT type
+check_derivatives.f90:81:44:
+
+   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
+      |                                            1~~~
+Error: Symbol ‘dfdx’ at (1) has no IMPLICIT type
+check_derivatives.f90:81:50:
+
+   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
+      |                                                  1~~~
+Error: Symbol ‘dfdy’ at (1) has no IMPLICIT type
+check_derivatives.f90:81:56:
+
+   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
+      |                                                        1~~~~~~~~
+Error: Symbol ‘laplacian’ at (1) has no IMPLICIT type
+check_derivatives.f90:76:24:
+
+   76 |     FUNCTION test_func(x, y) RESULT(f_val)
+      |                        1
+Error: Symbol ‘x’ at (1) has no IMPLICIT type
+check_derivatives.f90:76:27:
+
+   76 |     FUNCTION test_func(x, y) RESULT(f_val)
+      |                           1
+Error: Symbol ‘y’ at (1) has no IMPLICIT type
+check_derivatives.f90:76:42:
+
+   76 |     FUNCTION test_func(x, y) RESULT(f_val)
+      |                                          1
+Error: Result ‘f_val’ of contained function ‘test_func’ at (1) has no IMPLICIT type
+check_derivatives.f90:47:31:
+
+   47 |             f_vec(row_index) = test_func(x, y)
+      |                               1
+Error: Type mismatch in argument ‘x’ at (1); passed REAL(8) to UNKNOWN
+check_derivatives.f90:47:31:
+
+   47 |             f_vec(row_index) = test_func(x, y)
+      |                               1
+Error: Type mismatch in argument ‘y’ at (1); passed REAL(8) to UNKNOWN
+check_derivatives.f90:47:31:
+
+   47 |             f_vec(row_index) = test_func(x, y)
+      |                               1
+Error: Cannot convert UNKNOWN to REAL(8) at (1)
+make: *** [Makefile:49: check_derivatives.o] Error 1
+❯ make check_derivatives
