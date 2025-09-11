@@ -133,17 +133,11 @@ end subroutine initialize_block
 end subroutine generate_grid
 
 
-! =============================================================================
-! MODIFIED SUBROUTINE: generate_stretched_knots
-! 
-! Added optional argument `break_knot_multiplicity` to introduce repeated
-! internal knots at the `break_point_ratio`.
-! =============================================================================
 SUBROUTINE generate_stretched_knots(p, num_basis, knots_out, break_point_ratio, break_knot_multiplicity)
         integer, intent(in)     :: p, num_basis
         real(dp), intent(out)   :: knots_out(:)
         real(dp), intent(in), optional :: break_point_ratio
-        integer, intent(in), optional  :: break_knot_multiplicity ! <-- NEW ARGUMENT
+        integer, intent(in), optional  :: break_knot_multiplicity !
 
         integer  :: i, m, break_index, n1, n2, k_mult, n2_new, i_start_part2
         real(dp) :: s, stretched_s
@@ -154,7 +148,6 @@ SUBROUTINE generate_stretched_knots(p, num_basis, knots_out, break_point_ratio, 
         knots_out(num_basis + 1 : m) = 1.0_dp
 
         if (present(break_point_ratio)) then
-            ! --- Multi-part stretching with optional multiplicity ---
 
             ! Set multiplicity. Default is 1 (a simple knot)
             k_mult = 1
@@ -162,12 +155,12 @@ SUBROUTINE generate_stretched_knots(p, num_basis, knots_out, break_point_ratio, 
                 k_mult = break_knot_multiplicity
             endif
 
-            ! Original logic to find the index for the break
+            ! index for the breakpoint(corner)
             break_index = NINT(REAL(num_basis - p, dp) * break_point_ratio) + p + 1
             n1 = break_index - (p + 1)
-            n2 = num_basis - break_index + 1 ! Original denominator calculation
+            n2 = num_basis - break_index + 1 
 
-            ! --- Part 1: Stretch from 0.0 to break_point_ratio ---
+            ! --- Part 1: Stretch from 0.0 to break_point_ratio 
             do i = p + 2, break_index
                 s = REAL(i - (p + 1), dp) / REAL(n1, dp)
                 stretched_s = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)
@@ -198,7 +191,6 @@ SUBROUTINE generate_stretched_knots(p, num_basis, knots_out, break_point_ratio, 
                     knots_out(i) = break_point_ratio + stretched_s * (1.0_dp - break_point_ratio)
                 enddo
             else
-                ! k_mult was so large it used all remaining knot slots.
                 ! Set all remaining internal knots to the break_point_ratio.
                 do i = i_start_part2, num_basis
                     knots_out(i) = break_point_ratio
@@ -206,7 +198,7 @@ SUBROUTINE generate_stretched_knots(p, num_basis, knots_out, break_point_ratio, 
             endif
 
         else
-            ! --- Simple one-part stretching (no change) ---
+            ! --- Simple one-part stretching 
             do i = p + 2, num_basis
                 s = REAL(i - p - 1, dp) / REAL(num_basis - p, dp)
                 knots_out(i) = 0.5d0 * (tanh(stretch_factor * (2.0d0 * s - 1.0d0)) + 1.0d0)

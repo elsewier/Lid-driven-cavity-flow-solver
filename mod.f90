@@ -94,23 +94,18 @@ module mod_params
 
 end module mod_params
 
-! =============================================================================
-! FILE: mod_bspline.f90
-! =============================================================================
 module mod_bspline
 
     use mod_params
     implicit none
 
-    ! The core recursive functions remain private to the module
     private :: bspline_basis, bspline_deriv1, bspline_deriv2
 
-    ! We expose the new physical-domain functions to the user
     public :: bspline_basis_physical, bspline_deriv1_physical, bspline_deriv2_physical
 
 contains
 
-    !> Evaluates B-spline basis function in the physical domain [xmin, xmax].
+    ! Evaluates B-spline basis function in the physical domain [xmin, xmax].
     FUNCTION bspline_basis_physical(i, p, knots, x, xmin, xmax) RESULT(val)
         USE mod_params, ONLY: dp
         INTEGER, INTENT(IN) :: i, p
@@ -122,7 +117,7 @@ contains
         val = bspline_basis(i, p, knots, u)
     END FUNCTION bspline_basis_physical
 
-    !> Evaluates 1st derivative of B-spline w.r.t. the physical coordinate.
+    ! Evaluates 1st derivative of B-spline w.r.t. the physical coordinate.
     FUNCTION bspline_deriv1_physical(i, p, knots, x, xmin, xmax) RESULT(val)
         USE mod_params, ONLY: dp
         INTEGER, INTENT(IN) :: i, p
@@ -138,7 +133,7 @@ contains
         val = bspline_deriv1(i, p, knots, u) * du_dx
     END FUNCTION bspline_deriv1_physical
 
-    !> Evaluates 2nd derivative of B-spline w.r.t. the physical coordinate.
+    ! Evaluates 2nd derivative of B-spline w.r.t. the physical coordinate.
     FUNCTION bspline_deriv2_physical(i, p, knots, x, xmin, xmax) RESULT(val)
         USE mod_params, ONLY: dp
         INTEGER, INTENT(IN) :: i, p
@@ -155,12 +150,8 @@ contains
     END FUNCTION bspline_deriv2_physical
 
 
-    ! =========================================================================
-    ! CORE RECURSIVE FUNCTIONS (UNCHANGED, NOW PRIVATE)
-    ! =========================================================================
 
     recursive function bspline_basis(i, p, knots, u) result(val)
-        ! ... (rest of the function is unchanged)
         ! Inputs
         integer, intent(in)     :: i            ! The index of basis function that we want to calculate
         integer, intent(in)     :: p            ! The polynomial degree of the bspline
@@ -203,7 +194,6 @@ contains
 
 
     function bspline_deriv1(i, p, knots, u) result(val)
-        ! ... (function is unchanged)
         integer, intent(in)     :: i,p
         real(dp), intent(in)    :: knots(:), u
         real(dp)                :: val, term1, term2, coeff1, coeff2
@@ -224,7 +214,6 @@ contains
 
 
     function bspline_deriv2(i, p, knots, u) result(val)
-        ! ... (function is unchanged)
         integer, intent(in)     :: i,p
         real(dp), intent(in)    :: knots(:), u
         real(dp)                :: val, term1, term2, coeff1, coeff2

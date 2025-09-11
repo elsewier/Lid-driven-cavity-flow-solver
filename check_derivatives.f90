@@ -1,6 +1,3 @@
-! =============================================================================
-! FILE: check_derivatives.f90 (Corrected)
-! =============================================================================
 PROGRAM check_derivatives
     USE mod_params
     USE mod_grid
@@ -48,12 +45,12 @@ PROGRAM check_derivatives
             row_index = global_point_offset + k
             x = blocks(iblock)%colloc_pts(k, 1)
             y = blocks(iblock)%colloc_pts(k, 2)
-            
+
             f_vec(row_index) = test_func(x, y)
 
             DO j = 1, blocks(iblock)%N_y
                 DO i = 1, blocks(iblock)%N_x
-                    M(row_index, get_global_psi_index(iblock, i, j)) = &
+                    M(row_index, get_global_psi_index(blocks, iblock, i, j)) = &
                         bspline_basis_physical(i, blocks(iblock)%P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) * &
                         bspline_basis_physical(j, blocks(iblock)%P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
                 END DO
@@ -85,8 +82,9 @@ PROGRAM check_derivatives
             y = blocks(iblock)%colloc_pts(k, 2)
 
             CALL get_exact_derivatives(x, y, dfdx_exact, dfdy_exact, laplacian_exact)
-            CALL get_approx_derivatives(blocks(iblock), d_f, x, y, dfdx_approx, dfdy_approx, laplacian_approx)
             
+            CALL get_approx_derivatives(blocks, blocks(iblock), d_f, x, y, dfdx_approx, dfdy_approx, laplacian_approx)
+
             WRITE(20,'(I2,A,F8.4,A,F8.4,A,E15.7,A,E15.7,A,E15.7,A,E15.7,A,E15.7,A,E15.7)') &
                 iblock, ',', x, ',', y, ',', dfdx_exact, ',', dfdx_approx, ',', &
                 dfdy_exact, ',', dfdy_approx, ',', laplacian_exact, ',', laplacian_approx
@@ -108,45 +106,42 @@ PROGRAM check_derivatives
     WRITE(*,'(A, E12.5)') "   RMS Error (dF/dy):     ", l2_err_dfdy
     WRITE(*,'(A, E12.5)') "   RMS Error (Laplacian): ", l2_err_laplacian
     WRITE(*,*) "Detailed results saved to 'derivative_check.csv'."
-    
+
     DEALLOCATE(blocks, M, f_vec, d_f, ipiv)
     WRITE(*,*) "================================================"
 
 CONTAINS
 
-    !> Analytical test function f(x, y)
+    ! Analytical test function f(x, y)
     FUNCTION test_func(x, y) RESULT(f_val)
         USE mod_params, ONLY: dp
-        ! --- FIX STARTS HERE ---
         IMPLICIT NONE
         REAL(dp), INTENT(IN) :: x, y
         REAL(dp) :: f_val
-        ! --- FIX ENDS HERE ---
         REAL(dp), PARAMETER :: PI = ACOS(-1.0_dp)
         f_val = SIN(PI * x) * COS(PI * y)
     END FUNCTION test_func
 
-    !> Calculates the exact derivatives of the test function
+    ! Calculates the exact derivatives of the test function
     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
         USE mod_params, ONLY: dp
-        ! --- FIX STARTS HERE ---
         IMPLICIT NONE
         REAL(dp), INTENT(IN) :: x, y
         REAL(dp), INTENT(OUT) :: dfdx, dfdy, laplacian
-        ! --- FIX ENDS HERE ---
         REAL(dp), PARAMETER :: PI = ACOS(-1.0_dp)
-        
+
         dfdx = PI * COS(PI * x) * COS(PI * y)
         dfdy = -PI * SIN(PI * x) * SIN(PI * y)
         laplacian = -2.0_dp * PI**2 * SIN(PI * x) * COS(PI * y)
     END SUBROUTINE get_exact_derivatives
 
-    !> Calculates derivatives from the B-spline representation
-    SUBROUTINE get_approx_derivatives(block, coeffs, x, y, dfdx, dfdy, laplacian)
+    ! Calculates derivatives from the B-spline representation
+    SUBROUTINE get_approx_derivatives(blocks, block, coeffs, x, y, dfdx, dfdy, laplacian)
         USE mod_params, ONLY: dp, block_type
         USE mod_bspline
         USE mod_solver, ONLY: get_global_psi_index
         IMPLICIT NONE
+        TYPE(block_type), INTENT(IN) :: blocks(:) ! <-- NEW ARGUMENT
         TYPE(block_type), INTENT(IN) :: block
         REAL(dp), INTENT(IN) :: coeffs(:)
         REAL(dp), INTENT(IN) :: x, y
@@ -154,12 +149,12 @@ CONTAINS
 
         INTEGER :: i, j, global_idx
         REAL(dp) :: N, M, dN_dx, dM_dy, d2N_dx2, d2M_dy2
-        
+
         dfdx = 0.0_dp; dfdy = 0.0_dp; laplacian = 0.0_dp
 
         DO j = 1, block%N_y
             DO i = 1, block%N_x
-                global_idx = get_global_psi_index(block%id, i, j)
+                global_idx = get_global_psi_index(blocks, block%id, i, j)
 
                 N       = bspline_basis_physical(i, block%P_x, block%knots_x, x, block%xmin, block%xmax)
                 M       = bspline_basis_physical(j, block%P_y, block%knots_y, y, block%ymin, block%ymax)
@@ -167,7 +162,7 @@ CONTAINS
                 dM_dy   = bspline_deriv1_physical(j, block%P_y, block%knots_y, y, block%ymin, block%ymax)
                 d2N_dx2 = bspline_deriv2_physical(i, block%P_x, block%knots_x, x, block%xmin, block%xmax)
                 d2M_dy2 = bspline_deriv2_physical(j, block%P_y, block%knots_y, y, block%ymin, block%ymax)
-                
+
                 dfdx = dfdx + coeffs(global_idx) * dN_dx * M
                 dfdy = dfdy + coeffs(global_idx) * N * dM_dy
                 laplacian = laplacian + coeffs(global_idx) * (d2N_dx2 * M + N * d2M_dy2)
