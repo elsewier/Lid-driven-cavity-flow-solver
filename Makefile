@@ -10,18 +10,21 @@ FFLAGS = -g -Wall -O2 $(OPTS)
 MOD_SRCS = mod.f90 grid.f90 solver.f90 
 MAIN_SRC = main.f90
 CHECKGRID_SRC = check_grid.f90
-CHECKDERIV_SRC = check_derivatives.f90 # Added new derivative checker source
+CHECKDERIV_SRC = check_derivatives.f90 
+CHECKPOISSON_SRC = check_poisson.f90
 
 # --- OBJECT FILES ---
 MOD_OBJS = $(MOD_SRCS:.f90=.o)
 SOLVER_MAIN_OBJ = $(MAIN_SRC:.f90=.o)
 CHECKGRID_OBJ = $(CHECKGRID_SRC:.f90=.o)
-CHECKDERIV_OBJ = $(CHECKDERIV_SRC:.f90=.o) # Added new object file
+CHECKDERIV_OBJ = $(CHECKDERIV_SRC:.f90=.o) 
+CHECKPOISSON_OBJ =$(CHECKPOISSON_SRC:.f90=.o)  
 
 # --- EXECUTABLE NAMES ---
 SOLVER_EXE = cavity_solver
 CHECKGRID_EXE = check_grid
-CHECKDERIV_EXE = check_derivatives # Added new executable name
+CHECKDERIV_EXE = check_derivatives  
+CHECKPOISSON_EXE = check_poisson
 
 # Default target: build the main solver
 .PHONY: all
@@ -37,18 +40,20 @@ check_grid: $(CHECKGRID_EXE)
 $(CHECKGRID_EXE): $(MOD_OBJS) $(CHECKGRID_OBJ)
 	$(FC) $(FFLAGS) $^ -o $@
 
-# --- NEW RULE: Build the derivative checking utility ---
-# This requires LAPACK and BLAS for the linear solve (DGESV)
 .PHONY: check_derivatives
 check_derivatives: $(CHECKDERIV_EXE)
 $(CHECKDERIV_EXE): $(MOD_OBJS) $(CHECKDERIV_OBJ)
 	$(FC) $(FFLAGS) $^ -o $@ $(LAPACKLIB) $(BLASLIB)
 
-# Generic rule to compile .f90 source files to .o object files
+.PHONY: check_poisson
+check_poisson: $(CHECKPOISSON_EXE)
+$(CHECKPOISSON_EXE): $(MOD_OBJS) $(CHECKPOISSON_OBJ)
+	$(FC) $(FFLAGS) $^ -o $@ $(LAPACKLIB) $(BLASLIB)
+
 %.o: %.f90
 	$(FC) $(FFLAGS) -c $< -o $@
 
 # Rule to clean up build files
 .PHONY: clean
 clean:
-	rm -f *.o *.mod $(SOLVER_EXE) $(CHECKGRID_EXE) $(CHECKDERIV_EXE)
+	rm -f *.o *.mod $(SOLVER_EXE) $(CHECKGRID_EXE) $(CHECKDERIV_EXE) $(CHECKPOISSON_EXE)
