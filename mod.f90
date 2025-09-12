@@ -11,76 +11,38 @@ module mod_params
         real(dp), parameter :: DOMAIN_YMIN = 0.0d0
         real(dp), parameter :: DOMAIN_YMAX = 1.0d0
 
-        ! LOCATION OF INNER CORNER 
+        ! LOCATION OF THE RE-ENTRANT CORNER
         real(dp), parameter :: CORNER_X = 0.7d0
         real(dp), parameter :: CORNER_Y = 0.4d0
 
-        ! GRID RESOLUTION - DISCRETIZATION PARAMETERS
-        integer, parameter :: NUM_BLOCKS = 2
+        ! =============================================================================
+        ! MESH CONFIGURATION FOR A 3-BLOCK L-SHAPED DOMAIN
+        ! =============================================================================
+        integer, parameter :: NUM_BLOCKS = 3
+        integer, parameter :: P_x = 3, P_y = 3
+
+        ! Block 1 (Bottom-Left)
+        integer, parameter :: NX_B1 = 35
+        integer, parameter :: NY_B1 = 20
+
+        ! Block 2 (Top-Left)
+        integer, parameter :: NX_B2 = NX_B1  ! Must match Block 1 in x
+        integer, parameter :: NY_B2 = 30
+
+        ! Block 3 (Right)
+        integer, parameter :: NX_B3 = 15
+        ! --- THIS IS THE CORRECTED LINE ---
+        ! Must match Block 2 in y for alignment.
+        integer, parameter :: NY_B3 = NY_B2 
 
         ! =============================================================================
-        ! CONFIGURATION 1: Degree p=3, Multiplicity m=3 (C^0 Continuity)
+        ! SHARED DATA STRUCTURE
         ! =============================================================================
-        ! integer, parameter :: P_x = 3, P_y = 3 ! B-spline degrees
-        ! ! BLOCK 1 (bottom left block)
-        ! integer, parameter :: NX_B1 = 49 ! (49 - 3 - 1) = 45, which is divisible by 3.
-        ! integer, parameter :: NY_B1 = 16 ! (16 - 3 - 1) = 12, which is divisible by 3.
-        ! ! BLOCK 2 (top block)
-        ! integer, parameter :: NX_B2_PART1 = NX_B1
-        ! integer, parameter :: NX_B2_PART2 = 22 ! NX_B2=70. (70-3-1)=66, divisible by 3.
-        ! integer, parameter :: NX_B2 = NX_B2_PART1 + NX_B2_PART2 - 1 
-        ! integer, parameter :: NY_B2 = 25 ! (25-3-1)=21, divisible by 3.
-        ! ! --- Knot Multiplicity ---
-        ! integer, parameter :: MULT_X_B1 = 3, MULT_Y_B1 = 3
-        ! integer, parameter :: MULT_X_B2 = 3, MULT_Y_B2 = 3
-
-        ! =============================================================================
-        ! CONFIGURATION 2: Degree p=4, Multiplicity m=3 (C^1 Continuity)
-        ! UNCOMMENT THE BLOCK BELOW TO USE
-        ! =============================================================================
-        ! integer, parameter :: P_x = 4, P_y = 4 ! B-spline degrees
-        ! ! BLOCK 1 (bottom left block)
-        ! integer, parameter :: NX_B1 = 50 ! (50 - 4 - 1) = 45, which is divisible by 3.
-        ! integer, parameter :: NY_B1 = 17 ! (17 - 4 - 1) = 12, which is divisible by 3.
-        ! ! BLOCK 2 (top block)
-        ! integer, parameter :: NX_B2_PART1 = NX_B1
-        ! integer, parameter :: NX_B2_PART2 = 22 ! NX_B2=71. (71-4-1)=66, divisible by 3.
-        ! integer, parameter :: NX_B2 = NX_B2_PART1 + NX_B2_PART2 - 1 
-        ! integer, parameter :: NY_B2 = 23 ! (23-4-1)=18, divisible by 3.
-        ! ! --- Knot Multiplicity ---
-        ! integer, parameter :: MULT_X_B1 = 3, MULT_Y_B1 = 3
-        ! integer, parameter :: MULT_X_B2 = 3, MULT_Y_B2 = 3
-
-        ! =============================================================================
-        ! CONFIGURATION 3: Degree p=5, Multiplicity m=3 (C^2 Continuity)
-        ! UNCOMMENT THE BLOCK BELOW TO USE
-        ! =============================================================================
-        integer, parameter :: P_x = 5, P_y = 5 ! B-spline degrees
-        ! BLOCK 1 (bottom left block)
-        integer, parameter :: NX_B1 = 51 ! (51 - 5 - 1) = 45, which is divisible by 3.
-        integer, parameter :: NY_B1 = 18 ! (18 - 5 - 1) = 12, which is divisible by 3.
-        ! BLOCK 2 (top block)
-        integer, parameter :: NX_B2_PART1 = NX_B1
-        integer, parameter :: NX_B2_PART2 = 22 ! NX_B2=72. (72-5-1)=66, divisible by 3.
-        integer, parameter :: NX_B2 = NX_B2_PART1 + NX_B2_PART2 - 1 
-        integer, parameter :: NY_B2 = 24 ! (24-5-1)=18, divisible by 3.
-        ! --- Knot Multiplicity ---
-        integer, parameter :: MULT_X_B1 = 3, MULT_Y_B1 = 3
-        integer, parameter :: MULT_X_B2 = 3, MULT_Y_B2 = 3
-
-        ! Physical parameters
-        ! ... (rest of the module is unchanged) ...
-        TYPE :: block_type                               ! will be used for multiblock mesh 
-                integer  :: id                           ! Block id 
-                integer  :: N_x, N_y                     ! number of points in each direction
-                integer  :: P_x, P_y                     ! B-spline degree in each direction
-
-                real(dp) :: xmin, xmax, ymin, ymax       ! Pyhsical boundaries of the block 
-
-                ! grid and basis information for this block
-                real(dp), allocatable :: colloc_pts(:,:)     ! (nx*ny,2)
-                integer, allocatable     :: boundary_types(:)   ! (nx * ny)
-                real(dp), allocatable    :: knots_x(:), knots_y(:)
+        TYPE :: block_type
+                integer  :: id, N_x, N_y, P_x, P_y
+                real(dp) :: xmin, xmax, ymin, ymax
+                real(dp), allocatable :: colloc_pts(:,:), knots_x(:), knots_y(:)
+                integer, allocatable  :: boundary_types(:)
         end type block_type
 
         ! Discretization parameters 
