@@ -46,8 +46,8 @@ program L_shaped_cavity_solver
   allocate(blocks(NUM_BLOCKS))
   do iblock = 1, NUM_BLOCKS 
     call initialize_block(blocks(iblock), iblock)
-    call generate_grid(blocks(iblock))
   enddo
+    call generate_global_grid(blocks(iblock))
 
   ! initialize solvers global numbering system 
   call initialize_solver(blocks)

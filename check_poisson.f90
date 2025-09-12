@@ -7,6 +7,7 @@ program check_poisson
 
     type(block_type), allocatable :: blocks(:)
     integer :: iblock, k, i_basis, j_basis
+	 integer :: i, j
     integer :: N, info, global_point_offset, row_index, col_idx
     real(dp), parameter :: pi = acos(-1.0d0)
 
@@ -67,10 +68,10 @@ program check_poisson
                     do j_basis = 1, blocks(iblock)%N_y
                         do i_basis = 1, blocks(iblock)%N_x
                             col_idx = get_global_psi_index(blocks, iblock, i_basis, j_basis)
-                            d2N_dx2 = bspline_deriv2_physical(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax)
-                            d2M_dy2 = bspline_deriv2_physical(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
-                            N_val = bspline_basis_physical(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax)
-                            M_val = bspline_basis_physical(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
+                            d2N_dx2 = bspline_deriv2_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax)
+                            d2M_dy2 = bspline_deriv2_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
+                            N_val = bspline_basis_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax)
+                            M_val = bspline_basis_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
                             A_psi(row_index, col_idx) = d2N_dx2 * M_val + N_val * d2M_dy2
                         end do
                     end do
@@ -79,8 +80,8 @@ program check_poisson
                     do j_basis = 1, blocks(iblock)%N_y
                         do i_basis = 1, blocks(iblock)%N_x
                             col_idx = get_global_psi_index(blocks, iblock, i_basis, j_basis)
-                            A_psi(row_index, col_idx) = bspline_basis_physical(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) * &
-                                                        bspline_basis_physical(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
+                            A_psi(row_index, col_idx) = bspline_basis_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) &
+                                                      * bspline_basis_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
                         end do
                     end do
                     b_rhs(row_index) = psi_exact(x, y)
@@ -88,140 +89,176 @@ program check_poisson
                     do j_basis = 1, blocks(iblock)%N_y
                         do i_basis = 1, blocks(iblock)%N_x
                             col_idx = get_global_psi_index(blocks, iblock, i_basis, j_basis)
-                            A_psi(row_index, col_idx) = bspline_basis_physical(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) * &
-                                                        bspline_deriv1_physical(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
+                            A_psi(row_index, col_idx) = bspline_basis_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) &
+                                                      * bspline_deriv1_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
                         end do
                     end do
                     b_rhs(row_index) = dpsi_dy_exact(x, y)
                 
                 case (BTYPE_INTERFACE)
                     b_rhs(row_index) = 0.0d0
-                    select case (iblock)
-                    case (1) ! -- Block 1 is MASTER (lower ID), enforces C0 --
-                        if (abs(x - CORNER_X) < 1.0e-9) then ! Interface with Block 3
-                            do j_basis = 1, blocks(1)%N_y
-                                do i_basis = 1, blocks(1)%N_x
-                                    col_idx = get_global_psi_index(blocks, 1, i_basis, j_basis)
-                                    N_val = bspline_basis_physical(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x, blocks(1)%xmin, blocks(1)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y, blocks(1)%ymin, blocks(1)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + N_val * M_val
-                                end do
+                    ! Check if this is a corner point (should be treated as wall, not interface)
+                    if (is_corner_point(x, y)) then
+                        ! Treat corner as wall
+                        do j_basis = 1, blocks(iblock)%N_y
+                            do i_basis = 1, blocks(iblock)%N_x
+                                col_idx = get_global_psi_index(blocks, iblock, i_basis, j_basis)
+                                A_psi(row_index, col_idx) = bspline_basis_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) &
+                                                          * bspline_basis_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
                             end do
-                            do j_basis = 1, blocks(3)%N_y
-                                do i_basis = 1, blocks(3)%N_x
-                                    col_idx = get_global_psi_index(blocks, 3, i_basis, j_basis)
-                                    N_val = bspline_basis_physical(i_basis, blocks(3)%P_x, blocks(3)%knots_x, x, blocks(3)%xmin, blocks(3)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(3)%P_y, blocks(3)%knots_y, y, blocks(3)%ymin, blocks(3)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - N_val * M_val
+                        end do
+                        b_rhs(row_index) = psi_exact(x, y)
+                    else
+                        select case (iblock)
+                            case (1) ! Block 1 interfaces with Block 2 (top)
+                                do j_basis = 1, blocks(1)%N_y
+                                    do i_basis = 1, blocks(1)%N_x
+                                        col_idx = get_global_psi_index(blocks, 1, i_basis, j_basis)
+                                        N_val = bspline_basis_physical(i_basis, P_x, blocks(1)%knots_x, x, blocks(1)%xmin, blocks(1)%xmax)
+                                        M_val = bspline_basis_physical(j_basis, P_y, blocks(1)%knots_y, y, blocks(1)%ymin, blocks(1)%ymax)
+                                        A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + N_val * M_val
+                                    end do
                                 end do
-                            end do
-                        else ! Interface with Block 2
-                            do j_basis = 1, blocks(1)%N_y
-                                do i_basis = 1, blocks(1)%N_x
-                                    col_idx = get_global_psi_index(blocks, 1, i_basis, j_basis)
-                                    N_val = bspline_basis_physical(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x, blocks(1)%xmin, blocks(1)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y, blocks(1)%ymin, blocks(1)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + N_val * M_val
+                                do j_basis = 1, blocks(2)%N_y
+                                    do i_basis = 1, blocks(2)%N_x
+                                        col_idx = get_global_psi_index(blocks, 2, i_basis, j_basis)
+                                        N_val = bspline_basis_physical(i_basis, P_x, blocks(2)%knots_x, x, blocks(2)%xmin, blocks(2)%xmax)
+                                        M_val = bspline_basis_physical(j_basis, P_y, blocks(2)%knots_y, y, blocks(2)%ymin, blocks(2)%ymax)
+                                        A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - N_val * M_val
+                                    end do
                                 end do
-                            end do
-                            do j_basis = 1, blocks(2)%N_y
-                                do i_basis = 1, blocks(2)%N_x
-                                    col_idx = get_global_psi_index(blocks, 2, i_basis, j_basis)
-                                    N_val = bspline_basis_physical(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x, blocks(2)%xmin, blocks(2)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y, blocks(2)%ymin, blocks(2)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - N_val * M_val
+                                
+                            case (2) ! Block 2 interfaces with both Block 1 (bottom) and Block 3 (right)
+                                if (abs(y - CORNER_Y) < 1.0e-9) then ! Interface with Block 1 (bottom)
+                                    do j_basis = 1, blocks(1)%N_y
+                                        do i_basis = 1, blocks(1)%N_x
+                                            col_idx = get_global_psi_index(blocks, 1, i_basis, j_basis)
+                                            N_val = bspline_basis_physical(i_basis, P_x, blocks(1)%knots_x, x, blocks(1)%xmin, blocks(1)%xmax)
+                                            dM_dy = bspline_deriv1_physical(j_basis, P_y, blocks(1)%knots_y, y, blocks(1)%ymin, blocks(1)%ymax)
+                                            A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + N_val * dM_dy
+                                        end do
+                                    end do
+                                    do j_basis = 1, blocks(2)%N_y
+                                        do i_basis = 1, blocks(2)%N_x
+                                            col_idx = get_global_psi_index(blocks, 2, i_basis, j_basis)
+                                            N_val = bspline_basis_physical(i_basis, P_x, blocks(2)%knots_x, x, blocks(2)%xmin, blocks(2)%xmax)
+                                            dM_dy = bspline_deriv1_physical(j_basis, P_y, blocks(2)%knots_y, y, blocks(2)%ymin, blocks(2)%ymax)
+                                            A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - N_val * dM_dy
+                                        end do
+                                    end do
+                                else ! Interface with Block 3 (right)
+                                    do j_basis = 1, blocks(2)%N_y
+                                        do i_basis = 1, blocks(2)%N_x
+                                            col_idx = get_global_psi_index(blocks, 2, i_basis, j_basis)
+                                            N_val = bspline_basis_physical(i_basis, P_x, blocks(2)%knots_x, x, blocks(2)%xmin, blocks(2)%xmax)
+                                            M_val = bspline_basis_physical(j_basis, P_y, blocks(2)%knots_y, y, blocks(2)%ymin, blocks(2)%ymax)
+                                            A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + N_val * M_val
+                                        end do
+                                    end do
+                                    do j_basis = 1, blocks(3)%N_y
+                                        do i_basis = 1, blocks(3)%N_x
+                                            col_idx = get_global_psi_index(blocks, 3, i_basis, j_basis)
+                                            N_val = bspline_basis_physical(i_basis, P_x, blocks(3)%knots_x, x, blocks(3)%xmin, blocks(3)%xmax)
+                                            M_val = bspline_basis_physical(j_basis, P_y, blocks(3)%knots_y, y, blocks(3)%ymin, blocks(3)%ymax)
+                                            A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - N_val * M_val
+                                        end do
+                                    end do
+                                endif
+                                
+                            case (3) ! Block 3 interfaces with Block 2 (left)
+                                do j_basis = 1, blocks(2)%N_y
+                                    do i_basis = 1, blocks(2)%N_x
+                                        col_idx = get_global_psi_index(blocks, 2, i_basis, j_basis)
+                                        dN_dx = bspline_deriv1_physical(i_basis, P_x, blocks(2)%knots_x, x, blocks(2)%xmin, blocks(2)%xmax)
+                                        M_val = bspline_basis_physical(j_basis, P_y, blocks(2)%knots_y, y, blocks(2)%ymin, blocks(2)%ymax)
+                                        A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + dN_dx * M_val
+                                    end do
                                 end do
-                            end do
-                        endif
-                    case (2) ! -- Block 2 can be MASTER or SLAVE --
-                        if (abs(y - CORNER_Y) < 1.0e-9) then ! Interface with B1. B2 is SLAVE, enforces C1.
-                            do j_basis = 1, blocks(1)%N_y
-                                do i_basis = 1, blocks(1)%N_x
-                                    col_idx = get_global_psi_index(blocks, 1, i_basis, j_basis)
-                                    N_val = bspline_basis_physical(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x, blocks(1)%xmin, blocks(1)%xmax)
-                                    dM_dy = bspline_deriv1_physical(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y, blocks(1)%ymin, blocks(1)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + N_val * dM_dy
+                                do j_basis = 1, blocks(3)%N_y
+                                    do i_basis = 1, blocks(3)%N_x
+                                        col_idx = get_global_psi_index(blocks, 3, i_basis, j_basis)
+                                        dN_dx = bspline_deriv1_physical(i_basis, P_x, blocks(3)%knots_x, x, blocks(3)%xmin, blocks(3)%xmax)
+                                        M_val = bspline_basis_physical(j_basis, P_y, blocks(3)%knots_y, y, blocks(3)%ymin, blocks(3)%ymax)
+                                        A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - dN_dx * M_val
+                                    end do
                                 end do
-                            end do
-                            do j_basis = 1, blocks(2)%N_y
-                                do i_basis = 1, blocks(2)%N_x
-                                    col_idx = get_global_psi_index(blocks, 2, i_basis, j_basis)
-                                    N_val = bspline_basis_physical(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x, blocks(2)%xmin, blocks(2)%xmax)
-                                    dM_dy = bspline_deriv1_physical(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y, blocks(2)%ymin, blocks(2)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - N_val * dM_dy
-                                end do
-                            end do
-                        else ! Interface with B3. B2 is MASTER, enforces C0.
-                            do j_basis = 1, blocks(2)%N_y
-                                do i_basis = 1, blocks(2)%N_x
-                                    col_idx = get_global_psi_index(blocks, 2, i_basis, j_basis)
-                                    N_val = bspline_basis_physical(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x, blocks(2)%xmin, blocks(2)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y, blocks(2)%ymin, blocks(2)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + N_val * M_val
-                                end do
-                            end do
-                            do j_basis = 1, blocks(3)%N_y
-                                do i_basis = 1, blocks(3)%N_x
-                                    col_idx = get_global_psi_index(blocks, 3, i_basis, j_basis)
-                                    N_val = bspline_basis_physical(i_basis, blocks(3)%P_x, blocks(3)%knots_x, x, blocks(3)%xmin, blocks(3)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(3)%P_y, blocks(3)%knots_y, y, blocks(3)%ymin, blocks(3)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - N_val * M_val
-                                end do
-                            end do
-                        endif
-                    case (3) ! -- Block 3 is always SLAVE, enforces C1 --
-                        if (y < CORNER_Y) then ! Interface with B1
-                            do j_basis = 1, blocks(1)%N_y
-                                do i_basis = 1, blocks(1)%N_x
-                                    col_idx = get_global_psi_index(blocks, 1, i_basis, j_basis)
-                                    dN_dx = bspline_deriv1_physical(i_basis, blocks(1)%P_x, blocks(1)%knots_x, x, blocks(1)%xmin, blocks(1)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(1)%P_y, blocks(1)%knots_y, y, blocks(1)%ymin, blocks(1)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + dN_dx * M_val
-                                end do
-                            end do
-                            do j_basis = 1, blocks(3)%N_y
-                                do i_basis = 1, blocks(3)%N_x
-                                    col_idx = get_global_psi_index(blocks, 3, i_basis, j_basis)
-                                    dN_dx = bspline_deriv1_physical(i_basis, blocks(3)%P_x, blocks(3)%knots_x, x, blocks(3)%xmin, blocks(3)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(3)%P_y, blocks(3)%knots_y, y, blocks(3)%ymin, blocks(3)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - dN_dx * M_val
-                                end do
-                            end do
-                        else ! Interface with B2
-                            do j_basis = 1, blocks(2)%N_y
-                                do i_basis = 1, blocks(2)%N_x
-                                    col_idx = get_global_psi_index(blocks, 2, i_basis, j_basis)
-                                    dN_dx = bspline_deriv1_physical(i_basis, blocks(2)%P_x, blocks(2)%knots_x, x, blocks(2)%xmin, blocks(2)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(2)%P_y, blocks(2)%knots_y, y, blocks(2)%ymin, blocks(2)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) + dN_dx * M_val
-                                end do
-                            end do
-                            do j_basis = 1, blocks(3)%N_y
-                                do i_basis = 1, blocks(3)%N_x
-                                    col_idx = get_global_psi_index(blocks, 3, i_basis, j_basis)
-                                    dN_dx = bspline_deriv1_physical(i_basis, blocks(3)%P_x, blocks(3)%knots_x, x, blocks(3)%xmin, blocks(3)%xmax)
-                                    M_val = bspline_basis_physical(j_basis, blocks(3)%P_y, blocks(3)%knots_y, y, blocks(3)%ymin, blocks(3)%ymax)
-                                    A_psi(row_index, col_idx) = A_psi(row_index, col_idx) - dN_dx * M_val
-                                end do
-                            end do
-                        endif
-                    end select
+                        end select
+                    end if
             end select
         end do
         global_point_offset = global_point_offset + (blocks(iblock)%N_x * blocks(iblock)%N_y)
     end do
     
-    ! 3. SOLVE
-    write(*, *) "3. Solving for numerical B-spline coefficients..."
-    d_psi_numerical = b_rhs
-    allocate(A_psi_copy(N, N)); A_psi_copy = A_psi
-    call dgesv(N, 1, A_psi, N, ipiv, d_psi_numerical, N, info)
-    if (info /= 0) then
-        write(*, *) "DGESV failed. INFO=", info
-        stop
-    end if
-    deallocate(A_psi)
+  !  3. SOLVE
+write(*, *) "3. Solving for numerical B-spline coefficients..."
+d_psi_numerical = b_rhs
+allocate(A_psi_copy(N, N)); A_psi_copy = A_psi
 
+! ======================================================================
+!           <<< DIAGNOSTIC FOR ROW 647 >>>
+! ======================================================================
+write(*,*)
+write(*,*) "--- DIAGNOSTIC: Locating Row 647 ---"
+global_point_offset = 0
+do iblock = 1, NUM_BLOCKS
+    do j = 1, blocks(iblock)%N_y
+        do i = 1, blocks(iblock)%N_x
+            k = (j-1)*blocks(iblock)%N_x + i
+            row_index = global_point_offset + k
+            if (row_index == 647) then
+                x = blocks(iblock)%colloc_pts(k, 1)
+                y = blocks(iblock)%colloc_pts(k, 2)
+                write(*,*) "Row 647 found!"
+                write(*,*) "Global Row Index:     ", row_index
+                write(*,*) "Block ID:             ", iblock
+                write(*,*) "Local Index (k):      ", k
+                write(*,*) "Grid Indices (i, j):  ", i, j, " (out of ", blocks(iblock)%N_x, blocks(iblock)%N_y, ")"
+                write(*,*) "Coordinates (x, y):   ", x, y
+                write(*, '(A, I0)') "Boundary Type Flag:   ", blocks(iblock)%boundary_types(k)
+                write(*,*) "(0=Interior, 1=Wall, 2=Interface, 3=Moving Lid)"
+                
+                ! Check if this is actually an interior point
+                if (blocks(iblock)%boundary_types(k) == BTYPE_INTERIOR) then
+                    write(*,*) "This is an interior point. Checking matrix row..."
+                    
+                    ! Check if the row is all zeros
+                    if (all(abs(A_psi(row_index, :)) < 1.0e-12)) then
+                        write(*,*) "ERROR: Row 647 is all zeros!"
+                    else
+                        write(*,*) "Row 647 has non-zero entries. Checking the Laplacian calculation..."
+                        
+                        ! Check the Laplacian calculation for this point
+                        do j_basis = 1, blocks(iblock)%N_y
+                            do i_basis = 1, blocks(iblock)%N_x
+                                col_idx = get_global_psi_index(blocks, iblock, i_basis, j_basis)
+                                if (abs(A_psi(row_index, col_idx)) > 1.0e-12) then
+                                    d2N_dx2 = bspline_deriv2_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax)
+                                    d2M_dy2 = bspline_deriv2_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
+                                    N_val = bspline_basis_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax)
+                                    M_val = bspline_basis_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
+                                    
+                                    write(*,*) "Non-zero entry at col:", col_idx, "value:", A_psi(row_index, col_idx)
+                                    write(*,*) "Basis indices:", i_basis, j_basis
+                                    write(*,*) "d2N_dx2:", d2N_dx2
+                                    write(*,*) "d2M_dy2:", d2M_dy2
+                                    write(*,*) "N_val:", N_val
+                                    write(*,*) "M_val:", M_val
+                                    write(*,*) "d2N_dx2 * M_val + N_val * d2M_dy2:", d2N_dx2 * M_val + N_val * d2M_dy2
+                                end if
+                            end do
+                        end do
+                    end if
+                end if
+                
+                write(*,*) "--- END DIAGNOSTIC FOR ROW 647 ---"
+                ! stop
+            endif
+        end do
+    end do
+    global_point_offset = global_point_offset + (blocks(iblock)%N_x * blocks(iblock)%N_y)
+end do
+    write(*,*) "--- DIAGNOSTIC: Point 666 not found (this is unexpected) ---"
+    ! ======================================================================
     ! --- Residual Check ---
     allocate(res_vec(N))
     res_vec = matmul(A_psi_copy, d_psi_numerical) - b_rhs
@@ -246,8 +283,8 @@ program check_poisson
             do j_basis = 1, blocks(iblock)%N_y
                 do i_basis = 1, blocks(iblock)%N_x
                     col_idx = get_global_psi_index(blocks, iblock, i_basis, j_basis)
-                    M_psi(row_index, col_idx) = bspline_basis_physical(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) * &
-                                                bspline_basis_physical(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
+                    M_psi(row_index, col_idx) = bspline_basis_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) * &
+                                                bspline_basis_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
                 end do
             end do
         end do
@@ -299,8 +336,8 @@ program check_poisson
                 do i_basis = 1, blocks(iblock)%N_x
                     col_idx = get_global_psi_index(blocks, iblock, i_basis, j_basis)
                     psi_numerical_at_point = psi_numerical_at_point + d_psi_numerical(col_idx) * &
-                                             bspline_basis_physical(i_basis, blocks(iblock)%P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) * &
-                                             bspline_basis_physical(j_basis, blocks(iblock)%P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
+                                             bspline_basis_physical(i_basis, P_x, blocks(iblock)%knots_x, x, blocks(iblock)%xmin, blocks(iblock)%xmax) * &
+                                             bspline_basis_physical(j_basis, P_y, blocks(iblock)%knots_y, y, blocks(iblock)%ymin, blocks(iblock)%ymax)
                 end do
             end do
             psi_exact_at_point = psi_exact(x, y)
@@ -350,5 +387,22 @@ contains
         real(dp) :: val
         val = -pi * sin(pi * x) * sin(pi * y)
     end function dpsi_dy_exact
+
+    function is_corner_point(x, y) result(is_corner)
+        implicit none
+        real(dp), intent(in) :: x, y
+        logical :: is_corner
+        
+        is_corner = .false.
+        ! Check if point is at any of the corners
+        if ((abs(x - DOMAIN_XMIN) < 1.0e-9 .and. abs(y - DOMAIN_YMIN) < 1.0e-9) .or. &
+            (abs(x - DOMAIN_XMIN) < 1.0e-9 .and. abs(y - DOMAIN_YMAX) < 1.0e-9) .or. &
+            (abs(x - DOMAIN_XMAX) < 1.0e-9 .and. abs(y - DOMAIN_YMIN) < 1.0e-9) .or. &
+            (abs(x - DOMAIN_XMAX) < 1.0e-9 .and. abs(y - DOMAIN_YMAX) < 1.0e-9) .or. &
+            (abs(x - CORNER_X) < 1.0e-9 .and. abs(y - CORNER_Y) < 1.0e-9) .or. &
+            (abs(x - DOMAIN_XMIN) < 1.0e-9 .and. abs(y - CORNER_Y) < 1.0e-9)) then
+            is_corner = .true.
+        end if
+    end function is_corner_point
 
 end program check_poisson

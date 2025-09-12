@@ -22,15 +22,15 @@ module mod_params
         integer, parameter :: P_x = 3, P_y = 3
 
         ! Block 1 (Bottom-Left)
-        integer, parameter :: NX_B1 = 35
-        integer, parameter :: NY_B1 = 20
+        integer, parameter :: NX_B1 = 70
+        integer, parameter :: NY_B1 = 40
 
         ! Block 2 (Top-Left)
         integer, parameter :: NX_B2 = NX_B1  ! Must match Block 1 in x
-        integer, parameter :: NY_B2 = 30
+        integer, parameter :: NY_B2 = 60
 
         ! Block 3 (Right)
-        integer, parameter :: NX_B3 = 15
+        integer, parameter :: NX_B3 = 30
         ! --- THIS IS THE CORRECTED LINE ---
         ! Must match Block 2 in y for alignment.
         integer, parameter :: NY_B3 = NY_B2 

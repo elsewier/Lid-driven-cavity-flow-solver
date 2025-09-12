@@ -1,57 +1,133 @@
-check_derivatives.f90:81:38:
+ ================================================
+    Poisson solver verification (MMS) - 3 Blocks
+ ================================================
+ 1. Initializing grid and solver...
+ DEBUG: Point at (0,0.4) coordinates:   0.0000000000000000       0.40000000000000002
+ DEBUG: Boundary type:           2
+ 2. Assembling MMS Poisson System...
+ 3. Solving for numerical B-spline coefficients...
 
-   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
-      |                                      1
-Error: Symbol ‘x’ at (1) has no IMPLICIT type
-check_derivatives.f90:81:41:
-
-   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
-      |                                         1
-Error: Symbol ‘y’ at (1) has no IMPLICIT type
-check_derivatives.f90:81:44:
-
-   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
-      |                                            1~~~
-Error: Symbol ‘dfdx’ at (1) has no IMPLICIT type
-check_derivatives.f90:81:50:
-
-   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
-      |                                                  1~~~
-Error: Symbol ‘dfdy’ at (1) has no IMPLICIT type
-check_derivatives.f90:81:56:
-
-   81 |     SUBROUTINE get_exact_derivatives(x, y, dfdx, dfdy, laplacian)
-      |                                                        1~~~~~~~~
-Error: Symbol ‘laplacian’ at (1) has no IMPLICIT type
-check_derivatives.f90:76:24:
-
-   76 |     FUNCTION test_func(x, y) RESULT(f_val)
-      |                        1
-Error: Symbol ‘x’ at (1) has no IMPLICIT type
-check_derivatives.f90:76:27:
-
-   76 |     FUNCTION test_func(x, y) RESULT(f_val)
-      |                           1
-Error: Symbol ‘y’ at (1) has no IMPLICIT type
-check_derivatives.f90:76:42:
-
-   76 |     FUNCTION test_func(x, y) RESULT(f_val)
-      |                                          1
-Error: Result ‘f_val’ of contained function ‘test_func’ at (1) has no IMPLICIT type
-check_derivatives.f90:47:31:
-
-   47 |             f_vec(row_index) = test_func(x, y)
-      |                               1
-Error: Type mismatch in argument ‘x’ at (1); passed REAL(8) to UNKNOWN
-check_derivatives.f90:47:31:
-
-   47 |             f_vec(row_index) = test_func(x, y)
-      |                               1
-Error: Type mismatch in argument ‘y’ at (1); passed REAL(8) to UNKNOWN
-check_derivatives.f90:47:31:
-
-   47 |             f_vec(row_index) = test_func(x, y)
-      |                               1
-Error: Cannot convert UNKNOWN to REAL(8) at (1)
-make: *** [Makefile:49: check_derivatives.o] Error 1
-❯ make check_derivatives
+ --- DIAGNOSTIC: Locating Row 647 ---
+ Row 647 found!
+ Global Row Index:              647
+ Block ID:                        1
+ Local Index (k):               647
+ Grid Indices (i, j):            17          19  (out of           35          20 )
+ Coordinates (x, y):     0.29889726935226346       0.39548935722002376
+Boundary Type Flag:   0
+ (0=Interior, 1=Wall, 2=Interface, 3=Moving Lid)
+ This is an interior point. Checking matrix row...
+ Row 647 has non-zero entries. Checking the Laplacian calculation...
+ Non-zero entry at col:         576 value:   6663.5694935492829
+ Basis indices:          16          17
+ d2N_dx2:   348.65035119398749
+ d2M_dy2:   43572.193148500803
+ N_val:  0.15174943079350275
+ M_val:  0.14775256833475486
+ d2N_dx2 * M_val + N_val * d2M_dy2:   6663.5694935492829
+ Non-zero entry at col:         577 value:   28674.854827134997
+ Basis indices:          17          17
+ d2N_dx2:  -661.66776198523576
+ d2M_dy2:   43572.193148500803
+ N_val:  0.66034357830672130
+ M_val:  0.14775256833475486
+ d2N_dx2 * M_val + N_val * d2M_dy2:   28674.854827134997
+ Non-zero entry at col:         578 value:   8229.3762648306838
+ Basis indices:          18          17
+ d2N_dx2:   293.00910520808958
+ d2M_dy2:   43572.193148500803
+ N_val:  0.18787402757284391
+ M_val:  0.14775256833475486
+ d2N_dx2 * M_val + N_val * d2M_dy2:   8229.3762648306838
+ Non-zero entry at col:         579 value:   4.3925629858372393
+ Basis indices:          19          17
+ d2N_dx2:   20.008305583158734
+ d2M_dy2:   43572.193148500803
+ N_val:   3.2963326932014653E-005
+ M_val:  0.14775256833475486
+ d2N_dx2 * M_val + N_val * d2M_dy2:   4.3925629858372393
+ Non-zero entry at col:         611 value:  -16787.381129901631
+ Basis indices:          16          18
+ d2N_dx2:   348.65035119398749
+ d2M_dy2:  -112032.21407226886
+ N_val:  0.15174943079350275
+ M_val:  0.61219954424270240
+ d2N_dx2 * M_val + N_val * d2M_dy2:  -16787.381129901631
+ Non-zero entry at col:         612 value:  -74384.825828434085
+ Basis indices:          17          18
+ d2N_dx2:  -661.66776198523576
+ d2M_dy2:  -112032.21407226886
+ N_val:  0.66034357830672130
+ M_val:  0.61219954424270240
+ d2N_dx2 * M_val + N_val * d2M_dy2:  -74384.825828434085
+ Non-zero entry at col:         613 value:  -20868.563234992838
+ Basis indices:          18          18
+ d2N_dx2:   293.00910520808958
+ d2M_dy2:  -112032.21407226886
+ N_val:  0.18787402757284391
+ M_val:  0.61219954424270240
+ d2N_dx2 * M_val + N_val * d2M_dy2:  -20868.563234992838
+ Non-zero entry at col:         614 value:   8.5561210596968440
+ Basis indices:          19          18
+ d2N_dx2:   20.008305583158734
+ d2M_dy2:  -112032.21407226886
+ N_val:   3.2963326932014653E-005
+ M_val:  0.61219954424270240
+ d2N_dx2 * M_val + N_val * d2M_dy2:   8.5561210596968440
+ Non-zero entry at col:         646 value:   8121.8347157810149
+ Basis indices:          16          19
+ d2N_dx2:   348.65035119398749
+ d2M_dy2:   52970.313192577683
+ N_val:  0.15174943079350275
+ M_val:  0.23983867954647820
+ d2N_dx2 * M_val + N_val * d2M_dy2:   8121.8347157810149
+ Non-zero entry at col:         647 value:   34819.912635281456
+ Basis indices:          17          19
+ d2N_dx2:  -661.66776198523576
+ d2M_dy2:   52970.313192577683
+ N_val:  0.66034357830672130
+ M_val:  0.23983867954647820
+ d2N_dx2 * M_val + N_val * d2M_dy2:   34819.912635281456
+ Non-zero entry at col:         648 value:   10022.020998172720
+ Basis indices:          18          19
+ d2N_dx2:   293.00910520808958
+ d2M_dy2:   52970.313192577683
+ N_val:  0.18787402757284391
+ M_val:  0.23983867954647820
+ d2N_dx2 * M_val + N_val * d2M_dy2:   10022.020998172720
+ Non-zero entry at col:         649 value:   6.5448433424853647
+ Basis indices:          19          19
+ d2N_dx2:   20.008305583158734
+ d2M_dy2:   52970.313192577683
+ N_val:   3.2963326932014653E-005
+ M_val:  0.23983867954647820
+ d2N_dx2 * M_val + N_val * d2M_dy2:   6.5448433424853647
+ Non-zero entry at col:         681 value:   2350.6272717653210
+ Basis indices:          16          20
+ d2N_dx2:   348.65035119398749
+ d2M_dy2:   15489.707731190378
+ N_val:  0.15174943079350275
+ M_val:   2.0920787606454433E-004
+ d2N_dx2 * M_val + N_val * d2M_dy2:   2350.6272717653210
+ Non-zero entry at col:         682 value:   10228.390604032395
+ Basis indices:          17          20
+ d2N_dx2:  -661.66776198523576
+ d2M_dy2:   15489.707731190378
+ N_val:  0.66034357830672130
+ M_val:   2.0920787606454433E-004
+ d2N_dx2 * M_val + N_val * d2M_dy2:   10228.390604032395
+ Non-zero entry at col:         683 value:   2910.1750771975226
+ Basis indices:          18          20
+ d2N_dx2:   293.00910520808958
+ d2M_dy2:   15489.707731190378
+ N_val:  0.18787402757284391
+ M_val:   2.0920787606454433E-004
+ d2N_dx2 * M_val + N_val * d2M_dy2:   2910.1750771975226
+ Non-zero entry at col:         684 value:  0.51477819513928635
+ Basis indices:          19          20
+ d2N_dx2:   20.008305583158734
+ d2M_dy2:   15489.707731190378
+ N_val:   3.2963326932014653E-005
+ M_val:   2.0920787606454433E-004
+ d2N_dx2 * M_val + N_val * d2M_dy2:  0.51477819513928635
+ --- END DIAGNOSTIC FOR ROW 647 ---
